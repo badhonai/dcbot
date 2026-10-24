@@ -9,7 +9,7 @@ An informational community member, **not a moderator**. No administrator permiss
 | `/help` | Commands, privacy, data sources and limitations |
 | `/ask question:… project:…` | Search curated project docs; return matching excerpts and sources |
 | `/official project:…` | Owner-approved project links |
-| `/price token:BTC` | Fresh Coinbase Exchange USD last-trade quote; no bot cache |
+| `/price token:BTC` | Fresh exchange USD last-trade quote; no bot cache |
 | `/price token:btc-bitcoin mode:market` | Delayed aggregate market stats from CoinPaprika |
 | `/pair chain:ethereum address:…` | Up to five base-token pools for a **token** contract, ordered by liquidity |
 | `/newpairs chain:solana` | Up to eight recently created pools; NOT verified new projects |
@@ -36,9 +36,9 @@ Bot:    BTC: $80,532.63
         Coinbase · trade 2s ago
 ```
 
-Illustrative value only. The displayed value comes from a fresh exchange request, never AI memory. The bot rejects trades older than 30 seconds, missing timestamps and invalid prices. If the exchange is unavailable, the product is unlisted, or trading is too quiet to meet the freshness check, it says so instead of presenting delayed data as live. A fresh REST request is **not** a tick-by-tick stream or a guaranteed executable price. The quote is Coinbase's USD last trade, not a market-wide average. Prices can change immediately afterward.
+Illustrative value only. The displayed value comes from a fresh exchange request, never AI memory. The bot rejects trades older than 30 seconds, missing timestamps and invalid prices. If the exchange is unavailable, the product is unlisted, or trading is too quiet to meet the freshness check, it says so instead of presenting delayed data as live. A fresh REST request is **not** a tick-by-tick stream or a guaranteed executable price. The quote is a USD last trade from the named exchange (Coinbase first, Kraken fallback), not a market-wide average. Prices can change immediately afterward.
 
-Supported symbol requests are attempted as Coinbase `<SYMBOL>-USD` products, with aliases for common names (Bitcoin/BTC, Ethereum/ETH, Solana/SOL, etc.). Not every token is listed. For broader coverage and aggregate statistics use `/price token:<CoinPaprika ID> mode:market`; that data is clearly marked as delayed and is never an automatic live-price fallback.
+Supported symbol requests are attempted as Coinbase `<SYMBOL>-USD` products, then Kraken USD trades if needed, with aliases for common names (Bitcoin/BTC, Ethereum/ETH, Solana/SOL, etc.). Not every token is listed. For broader coverage and aggregate statistics use `/price token:<CoinPaprika ID> mode:market`; that data is clearly marked as delayed and is never an automatic live-price fallback.
 
 Common price, pool-discovery, glossary, pool-address and official-link requests are recognized locally without AI tokens. For less obvious requests **addressed to the bot by mention/reply**, optional Groq function calling chooses one validated read-only action. It needs a tool-capable model available in your account. Unsupported AI routing falls back to ordinary chat; it does not generate or execute invented tools. Simple English requests work without Groq. Ambiguous requests ask for clarification.
 
@@ -46,9 +46,9 @@ Set `naturalLanguageCommands` to `false` in `config.json` to require a mention/r
 
 ### Short follow-ups and minimal price replies
 
-After a price request, a short follow-up such as `Ar eth er?`, `and ETH?`, or `what about Solana?` fetches a **new quote** instead of asking general AI to repeat a stored value. Implicit context is scoped to the same user/channel and expires after two minutes. Replying directly to a recognizable bot price message can restore the action type after a restart; it never reuses the number from that message.
+After a price request, a short follow-up such as `Ar eth er?`, `SUI er?`, `and APT?`, or `what about Solana?` fetches a **new quote** instead of asking general AI to repeat a stored value. Implicit context is scoped to the same user/channel and expires after two minutes. Replying directly to a recognizable bot price message can restore the action type after a restart; it never reuses the number from that message.
 
-Public live-price replies contain only a bold price plus a small plain-text source/freshness line. There is no URL to generate a large website card, and embeds are explicitly suppressed. Numeric quote results and internal freshness metadata are not added to general AI chat history. The existing public-request cooldown still applies.
+Public live-price replies contain only a bold price plus a small plain-text source/freshness line. There is no URL to generate a large website card, and embeds are explicitly suppressed. Numeric quote results and internal freshness metadata are not added to general AI chat history. Connective words such as `er`/`ar` are stripped when extracting tickers, so `SUI er price` requests SUI, not ER. Follow-ups accept ticker-shaped names outside the alias list. AI glossary selection is restricted to real glossary terms, so a token cannot become a “Choose a term” response. The existing public-request cooldown still applies. If neither venue has a valid fresh trade, public chat shows one short unavailable message, not a large explanatory card.
 
 **Natural-language message replies are public**, including the typing indicator. They cannot be ephemeral. Use slash commands for private results. Public pool/doc results show the first card with a slash-command hint for additional pages. AI tool-selection requests, when used, send the triggering text to Groq; public conversation handling already uses the configured history policy.
 
@@ -123,7 +123,7 @@ No real project was supplied, so `knowledge/projects.json` starts empty. `/ask` 
 
 ## Free services and limits
 
-- **Coinbase Exchange:** uncached public USD ticker snapshots for supported exchange products. Latest trade must be no older than 30 seconds.
+- **Coinbase Exchange / Kraken:** uncached public USD trade snapshots. Coinbase is tried first; Kraken recent trades are a fallback. Both require an actual trade no older than 30 seconds, not merely a recently fetched HTTP response.
 - **CoinPaprika:** token search and delayed aggregate market stats via `mode:market`. No API key configured in this implementation.
 - **DEX Screener:** token pools, liquidity, FDV and trading data.
 - **GeckoTerminal:** recent pool feed, not every launch and not a verified-project directory.

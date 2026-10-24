@@ -5,7 +5,7 @@ const SPECS = {
     newpairs: { description: 'List recently created pools on an explicit network. Not vetted new projects.', required: ['chain'], properties: { chain: { type: 'string' } } },
     ask: { description: 'Search owner-approved project documents for project-specific facts.', required: ['question'], properties: { question: { type: 'string' }, project: { type: 'string' } } },
     official: { description: 'Get owner-approved project links.', required: [], properties: { project: { type: 'string' } } },
-    explain: { description: 'Explain a glossary term: liquidity, slippage, market cap, fdv, token unlock, gas, staking or rug pull.', required: ['term'], properties: { term: { type: 'string' } } },
+    explain: { description: 'Explain a glossary term: liquidity, slippage, market cap, fdv, token unlock, gas, staking or rug pull.', required: ['term'], properties: { term: { type: 'string', enum: ['liquidity', 'slippage', 'market cap', 'fdv', 'token unlock', 'gas', 'staking', 'rug pull'] } } },
 };
 const TOOL_DEFINITIONS = Object.entries(SPECS).map(([name, spec]) => ({ type: 'function', function: { name, description: spec.description, parameters: { type: 'object', properties: spec.properties, required: spec.required, additionalProperties: false } } }));
 function validateIntent(intent) {

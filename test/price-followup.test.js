@@ -14,7 +14,7 @@ function fixture() {
     const handlers = createHandlers({ client: { user: { id: 'bot' } }, config: { channels: ['a', 'b'], maxResponseLength: 1600 }, history, queue: new ChannelQueue(10), router: createIntentRouter(), now: () => time, logger: quiet,
         actions: { execute: async intent => {
             toolCalls.push(intent);
-            return { quote: { symbol: intent.args.token, price: intent.args.token === 'ETH' ? 2930 : 80500, ageSeconds: 1, tradedAt: '2026-10-24T10:00:00Z', fetchedAt: '2026-10-24T10:00:01Z' } };
+            return { quote: { symbol: intent.args.token, sourceLabel: 'Coinbase', price: intent.args.token === 'ETH' ? 2930 : 80500, ageSeconds: 1, tradedAt: '2026-10-24T10:00:00Z', fetchedAt: '2026-10-24T10:00:01Z' } };
         } }, ai: { respond: async () => { aiCalls++; return 'Ordinary chat'; } } });
     const message = { id: 'input', channelId: 'a', author: { id: 'person', displayName: 'Person', bot: false }, content: 'Btc er price koto ?', mentions: { has: () => false }, channel: { sendTyping: async () => {}, messages: { fetch: async () => ({ author: { id: 'bot' }, content: '**BTC: $80,500**' }) } }, reply: async payload => { sent.push(payload); return { id: 'sent-' + sent.length }; } };
     return { ...handlers, message, toolCalls, sent, history, advance: ms => { time += ms; }, aiCalls: () => aiCalls };

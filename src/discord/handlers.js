@@ -65,7 +65,10 @@ function createHandlers({ client, config, history, queue, ai, router, actions, l
                         if (result.quote) {
                             const q = result.quote;
                             context = null; // Do not feed quote values or internal freshness metadata back into AI chat.
-                            payload = { content: `**${q.symbol}: ${money(q.price)}**\n-# Coinbase · USD · trade ${q.ageSeconds}s ago`, flags: MessageFlags.SuppressEmbeds };
+                            payload = { content: `**${q.symbol}: ${money(q.price)}**\n-# ${q.sourceLabel || q.source || 'Exchange'} · USD · trade ${q.ageSeconds}s ago`, flags: MessageFlags.SuppressEmbeds };
+                        } else if (result.liveUnavailable) {
+                            payload = { content: result.pages[0].description, flags: MessageFlags.SuppressEmbeds };
+                            context = null;
                         } else {
                             const first = result.pages[0];
                             payload = { embeds: [{ ...first, footer: { text: [first.footer?.text, result.pages.length > 1 ? `More: /${intent.command}` : ''].filter(Boolean).join(' · ') } }] };

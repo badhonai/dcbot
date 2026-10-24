@@ -27,10 +27,10 @@ class MarketService {
             try {
                 const quote = await this.liveQuotes.get(query);
                 return { ...pages(card(`${quote.symbol} · USD`, `**${money(quote.price)}**`, {
-                    url: quote.url, footer: `Coinbase Exchange · Trade ${quote.ageSeconds}s ago · Fetched`, timestamp: quote.fetchedAt,
+                    url: quote.url, footer: `${quote.sourceLabel || quote.source} · Trade ${quote.ageSeconds}s ago · Fetched`, timestamp: quote.fetchedAt,
                 })), quote };
             } catch (error) {
-                if (['LIVE_UNAVAILABLE', 'STALE_QUOTE'].includes(error.code)) return notice('Live quote unavailable', error.message);
+                if (['LIVE_UNAVAILABLE', 'STALE_QUOTE'].includes(error.code)) return { ...notice('Live quote unavailable', error.message), liveUnavailable: true };
                 throw error;
             }
         }

@@ -60,7 +60,7 @@ test('common natural price questions resolve locally with no AI tokens', () => {
     for (const question of ['whats the live btc price?', 'BTC price', 'price of bitcoin', 'how much is ETH?', 'show me the price of $SOL']) {
         const intent = detectIntent(question); assert.equal(intent.command, 'price'); assert.equal(intent.args.mode, 'live');
     }
-    assert.equal(detectIntent('price of PEPE').args.token, 'pepe');
+    assert.equal(detectIntent('price of PEPE').args.token, 'PEPE');
 });
 test('ambiguous, historical and future questions do not invent live answers', () => {
     assert.ok(detectIntent('what is the price?').clarification);

@@ -12,7 +12,7 @@ const HELP = pages(
     card('Good to know', '', { fields: [
         { name: 'Privacy', value: 'Slash results: only you. Dismiss anytime. Auto-deletion is best effort while online.\nNormal @mention replies are public.' },
         { name: 'Networks', value: 'Ethereum · Solana · Base · BSC\nArbitrum · Polygon · Optimism · Avalanche' },
-        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Live quotes: Coinbase Exchange. Other data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
+        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Live quotes: Coinbase / Kraken. Other data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
     ] }),
 );
 function createWeb3Handler({ config, market, knowledge, replies, actions, logger = createLogger('commands') }) {

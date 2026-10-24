@@ -1,0 +1,8 @@
+[
+  {
+    "id": "your-project",
+    "name": "Your Project",
+    "links": [{"label": "Docs", "url": "https://YOUR-OFFICIAL-DOMAIN.example/docs"}],
+    "documents": [{"file": "projects/overview.md", "source": "https://YOUR-OFFICIAL-DOMAIN.example/docs", "updatedAt": "2026-10-24"}]
+  }
+]

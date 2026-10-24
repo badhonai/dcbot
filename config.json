@@ -1,11 +1,15 @@
 {
   "channels": [
     "1563288188863254528",
-    "1541473880546484305"
+    "1541473880546484305",
+    "1536762480167227517"
   ],
   "model": "qwen/qwen3.8-27b",
   "historyLength": 13,
   "maxResponseLength": 1600,
   "temperature": 0.7,
-  "systemPromptFile": "system-prompt.txt"
+  "systemPromptFile": "system-prompt.txt",
+  "maxCompletionTokens": 300,
+  "maxPendingPerChannel": 10,
+  "requestTimeoutMs": 30000
 }

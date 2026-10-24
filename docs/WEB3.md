@@ -22,7 +22,7 @@ All money formatting handles missing values as N/A. Sources and fetch timestamps
 
 ## Validation
 
-29 offline tests pass on Node 22. Tests cover the original public chat modules plus command definitions, provider caching/coalescing, 429 cooldown, token resolution, address validation, discovery warnings, knowledge retrieval and empty configuration, glossary, ephemeral acknowledgement, pagination ownership/navigation/dismissal/expiry, cooldowns, and private error handling. JavaScript syntax checks pass.
+38 offline tests pass on Node 22 (including nine shared-logger tests). Tests cover the original public chat modules plus command definitions, provider caching/coalescing, 429 cooldown, token resolution, address validation, discovery warnings, knowledge retrieval and empty configuration, glossary, ephemeral acknowledgement, pagination ownership/navigation/dismissal/expiry, cooldowns, and private error handling. JavaScript syntax checks pass.
 
 Live public HTTP smoke checks succeeded for CoinPaprika search/ticker, DEX Screener WETH pools, and GeckoTerminal Ethereum new pools from this workspace. These do not guarantee future availability or all-chain coverage. Live Discord command deployment, ephemeral rendering, gateway login, and Groq chat have not been tested without credentials. Staging-guild testing remains necessary.
 
@@ -35,3 +35,7 @@ Live public HTTP smoke checks succeeded for CoinPaprika search/ticker, DEX Scree
 5. Test `/price`, ambiguous token symbols, `/pair`, `/newpairs`, provider outages, invalid inputs, and channel restrictions.
 6. Set a currently supported Groq model only if enabling public AI chat.
 7. Start one instance; check logs and provider usage. Do not grant moderation/admin permissions.
+
+## Console logging update
+
+Shared `src/utils/logger.js` handles readable/JSON formatting, severity filtering, UTC timestamps, field bounds, control-character removal and credential redaction. All application `console.*` calls have been replaced. Bot startup, readiness, reconnect/resume, deployment and shutdown now use consistent component-scoped records. Normal command completions and cache hits are debug-only; expected input/setup failures do not generate error-level noise. Provider errors retain safe status metadata without raw responses. Logging tests cover formatting, severity/child inheritance, JSON integrity, redaction, injection resistance, bounds, silence/fallback levels, safe error metadata and severity routing.

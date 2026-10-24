@@ -1,8 +1,9 @@
+const { createLogger, errorDetails } = require('../utils/logger');
 const { splitMessage } = require('../utils/split-message');
 const { QueueFullError } = require('../conversation/channel-queue');
 const safeMentions = { parse: [], repliedUser: false };
 
-function createHandlers({ client, config, history, queue, ai, logger = console }) {
+function createHandlers({ client, config, history, queue, ai, logger = createLogger('chat') }) {
     const allowed = new Set(config.channels);
     async function onMessage(message) {
         if (!allowed.has(message.channelId) || message.author.bot) return;
@@ -25,7 +26,7 @@ function createHandlers({ client, config, history, queue, ai, logger = console }
                         history.add(message.channelId, 'assistant', chunk, sent.id);
                     }
                 } catch (error) {
-                    logger.error('Response failed', { channelId: message.channelId, status: error.status, name: error.name });
+                    logger.error('Response failed', { channelId: message.channelId, ...errorDetails(error) });
                     await message.reply({ content: error.status === 429 ? '⏳ Rate limited. Please try again shortly.' : '⚠️ I could not respond. Please try again.', allowedMentions: safeMentions });
                 }
             });
@@ -33,7 +34,7 @@ function createHandlers({ client, config, history, queue, ai, logger = console }
             if (error instanceof QueueFullError) {
                 // Drop overload without sending additional traffic into a saturated channel.
                 logger.warn('Channel queue full', { channelId: message.channelId });
-            } else logger.error('Message handler failed', { channelId: message.channelId, name: error.name });
+            } else logger.error('Message handler failed', { channelId: message.channelId, ...errorDetails(error) });
         }
     }
     return { onMessage };

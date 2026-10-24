@@ -105,6 +105,35 @@ docs/                        Review, roadmap, feature implementation notes
 
 Run `npm test` for offline tests. See [implementation details](docs/WEB3.md) and [scaling roadmap](docs/SCALING.md). The [earlier refactor review](docs/REVIEW.md) is historical; `/uns` has since been removed.
 
+## Clean console logs
+
+All application and command-deployment logs use a shared, dependency-free logger:
+
+```text
+2026-10-24T10:00:00.000Z  INFO   app             Starting Web3 assistant  |  node=v22.23.0
+2026-10-24T10:00:00.010Z  INFO   app             Configuration loaded  |  channels=3  aiChat=disabled  projects=1
+2026-10-24T10:00:00.020Z  INFO   app             Connecting to Discord
+2026-10-24T10:00:01.000Z  INFO   app             Bot online  |  bot=ExampleBot  guilds=1  commands=7  slashReplies=private
+```
+
+Examples are illustrative, not live status. Timestamps are UTC ISO 8601. Levels and component columns are aligned. Warnings/errors go to stderr; other levels go to stdout. Hosting platforms may merge these streams in a slightly different order.
+
+Configure `.env`:
+
+```dotenv
+LOG_LEVEL=info
+LOG_FORMAT=pretty
+```
+
+- `info` (default): startup, readiness, reconnect/resume, shutdown, warnings and errors. No per-message chatter.
+- `debug`: also show command completion times, provider responses and cache hits. No command arguments or message contents.
+- `warn`, `error`, or `silent`: progressively less output. Invalid levels fall back to `info`.
+- `LOG_FORMAT=json`: one structured record per line, with typed metadata under `fields`, for log collectors. Other formats use readable text.
+
+Errors show safe type/status/code metadata and actionable hints, not raw SDK payloads or stack traces. Sensitive metadata fields and configured credential values are redacted; nested objects are omitted and control characters stripped. **Do not deliberately pass secrets or user text to the logger**: redaction is defense in depth, not a guarantee of detecting every possible secret. Debug mode does not disable redaction.
+
+These settings govern application logs, not npm installation output, Node runtime warnings or hosting-provider output. No log-file dependency, paid service, ANSI colors or decorative banners are required.
+
 ## Remaining operational boundaries
 
 Deploy **one process** today. Public AI conversation history and private page sessions are volatile; restart clears them. The original public chat observes non-bot messages in allowed channels, even without a mention; tell members this. Public chat context sent to Groq contains display names and message text when AI is enabled. No attachment ingestion, message edit/delete synchronization, durable history, shared quota limits, or distributed coordination is implemented. No financial recommendations or token safety guarantees.

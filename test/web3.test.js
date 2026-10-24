@@ -13,8 +13,8 @@ const { commands } = require('../src/discord/commands');
 const textOf = value => JSON.stringify(value);
 const { explain } = require('../src/features/glossary');
 
-test('seven informational commands; no moderation command', () => {
-    assert.deepEqual(commands.map(c => c.name), ['help','ask','official','price','pair','newpairs','explain']);
+test('ten informational/agent commands; no moderation command', () => {
+    assert.deepEqual(commands.map(c => c.name), ['chat','search','read','help','ask','official','price','pair','newpairs','explain']);
 });
 test('public requests coalesce and cache; arbitrary hosts are rejected', async () => {
     let calls = 0;

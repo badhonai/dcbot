@@ -31,7 +31,7 @@ class PrivateReplies {
         }
         const id = randomBytes(12).toString('hex');
         let pages = Array.isArray(text?.pages) && text.pages.length ? text.pages.slice(0, 20) :
-            splitMessage(String(text || 'No results.').slice(0, 20000), 900).map(value => card('Web3 assistant', value));
+            splitMessage(String(text || 'No results.').slice(0, 20000), 900).map(value => card('AI assistant', value));
         const plain = interaction.appPermissions?.has(PermissionFlagsBits.EmbedLinks) === false;
         if (plain) pages = pages.flatMap(page => {
             const body = [`**${page.title}**`, page.description, ...(page.fields || []).map(f => `**${f.name}**\n${f.value}`), page.url ? `[Source](${page.url})` : '', page.footer?.text, page.timestamp ? `Fetched: ${page.timestamp}` : ''].filter(Boolean).join('\n\n');

@@ -1,3 +1,4 @@
+const { createAgentMessageHandler } = require('./agent-handler');
 const { PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { clip } = require('../utils/cards');
 const { createLogger, errorDetails } = require('../utils/logger');
@@ -6,7 +7,9 @@ const { QueueFullError } = require('../conversation/channel-queue');
 const { money } = require('../features/market');
 const safeMentions = { parse: [], repliedUser: false };
 
-function createHandlers({ client, config, history, queue, ai, router, actions, logger = createLogger('chat'), now = Date.now }) {
+function createHandlers({ client, config, history, queue, ai, router, actions, agent, logger = createLogger('chat'), now = Date.now }) {
+    if (agent) return createAgentMessageHandler({ client, config, queue, agent, logger, now });
+    // Legacy adapter compatibility only. Production always supplies the AI-first agent.
     const allowed = new Set(config.channels);
     const cooldowns = new Map();
     const recentActions = new Map();

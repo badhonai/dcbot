@@ -28,14 +28,14 @@ function usableCompletion(result) {
 function createFailoverClient({ providers, now = Date.now, logger = createLogger('ai') }) {
     const states = providers.map(provider => ({ ...provider, until: 0, failed: false, probing: false, generation: 0 }));
     return {
-        chat: { completions: { create: async request => {
+        chat: { completions: { create: async (request, options = {}) => {
             for (const state of states) {
                 if (state.until > now() || state.probing) continue;
                 const recovering = state.failed;
                 if (recovering) state.probing = true;
                 const generation = state.generation;
                 try {
-                    const result = await state.client.chat.completions.create({ ...request, model: state.model });
+                    const result = await state.client.chat.completions.create({ ...request, model: state.model }, options);
                     if (!usableCompletion(result)) throw Object.assign(new Error('Provider returned no answer or tool call'), { code: 'EMPTY_COMPLETION' });
                     if (generation === state.generation) {
                         state.until = 0; state.failed = false;
@@ -43,6 +43,7 @@ function createFailoverClient({ providers, now = Date.now, logger = createLogger
                     }
                     return result;
                 } catch (error) {
+                    if (options.signal?.aborted) throw error;
                     const policy = failurePolicy(error);
                     if (!policy) throw error;
                     const alreadyCooling = state.until > now();
@@ -56,7 +57,7 @@ function createFailoverClient({ providers, now = Date.now, logger = createLogger
     };
 }
 function createOllamaClient({ apiKey, timeoutMs = 30000, maxTokens = 1024, fetchFn = fetch }) {
-    return { chat: { completions: { create: async request => {
+    return { chat: { completions: { create: async (request, options = {}) => {
         const body = {
             model: request.model, messages: request.messages, stream: false,
             temperature: request.temperature ?? 0.2,
@@ -66,7 +67,7 @@ function createOllamaClient({ apiKey, timeoutMs = 30000, maxTokens = 1024, fetch
         };
         // Ollama documents tools but not tool_choice/max_completion_tokens compatibility.
         const response = await fetchFn('https://ollama.com/v1/chat/completions', {
-            method: 'POST', signal: AbortSignal.timeout(timeoutMs),
+            method: 'POST', signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
             headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         });
         if (!response.ok) {

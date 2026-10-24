@@ -1,11 +1,14 @@
-# Free-first Web3 Discord assistant
+# Free-first AI Discord agent
 
-An informational community member, **not a moderator**. No administrator permissions, wallet connections, transaction signing, or trading. Built with Discord.js and public market APIs. Optional Ollama Cloud AI uses GPT-OSS 120B by default, with Groq/Qwen fallback.
+An AI-first informational community member, **not a moderator**. No administrator permissions, wallet connections, transaction signing, or trading. Built with Discord.js and public market APIs. Optional Ollama Cloud AI uses GPT-OSS 120B by default, with Groq/Qwen fallback.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
+| `/chat message:…` | Private AI help: explanations, drafting, translation, research and summaries |
+| `/search query:…` | Web search with sources (Ollama free-account allowance required) |
+| `/read url:https://…` | Read an excerpt from a public webpage |
 | `/help` | Commands, privacy, data sources and limitations |
 | `/ask question:… project:…` | Search curated project docs; return matching excerpts and sources |
 | `/official project:…` | Owner-approved project links |
@@ -40,17 +43,23 @@ Illustrative value only. The displayed value comes from a fresh exchange request
 
 Supported symbol requests are attempted as Coinbase `<SYMBOL>-USD` products, then Kraken USD trades if needed, with aliases for common names (Bitcoin/BTC, Ethereum/ETH, Solana/SOL, etc.). Not every token is listed. For broader coverage and aggregate statistics use `/price token:<CoinPaprika ID> mode:market`; that data is clearly marked as delayed and is never an automatic live-price fallback.
 
-Common price, pool-discovery, glossary, pool-address and official-link requests are recognized locally without AI tokens. For less obvious requests **addressed to the bot by mention/reply**, optional AI function calling (Ollama first, Groq fallback) chooses one validated read-only action. It needs a tool-capable model available in your account. Unsupported AI routing falls back to ordinary chat; it does not generate or execute invented tools. Simple English requests work without either AI key. Ambiguous requests ask for clarification.
+### AI-first conversation, not token-name routing
 
-Set `naturalLanguageCommands` to `false` in `config.json` to require a mention/reply for public chat requests; slash commands are unaffected. Otherwise explicit recognized requests can trigger a response without mentioning the bot. Ordinary unrelated messages do not trigger AI calls. Both paths stay restricted to configured channels, with bounded tool concurrency and public-request cooldowns.
+Every supported public conversation request goes through the AI agent. It decides whether to answer, clarify or use read-only tools. A bare `BTC` does **not** trigger a price lookup: tools are disabled for bare single-word turns. Ask `what is Bitcoin?`, `explain BTC mining`, or `what is the live BTC price?` to express your intent. Without an AI key, use direct slash commands; production does not fall back to keyword routing.
 
-### Short follow-ups and minimal price replies
+Examples: `translate this to Bangla: ...`, `draft a short welcome message`, `search for the latest ... and compare sources`, `summarize https://example.com/article`, `calculate (125 * 1.08^2) - 125`. The agent can search, read relevant pages and synthesize an answer in multiple bounded steps. It cannot perform arbitrary automation, execute code, moderate, use wallets, make purchases, or post elsewhere.
 
-After a price request, a short follow-up such as `Ar eth er?`, `SUI er?`, `and APT?`, or `what about Solana?` fetches a **new quote** instead of asking general AI to repeat a stored value. Implicit context is scoped to the same user/channel and expires after two minutes. Replying directly to a recognizable bot price message can restore the action type after a restart; it never reuses the number from that message.
+Mention/reply to the bot for reliable activation. With `naturalLanguageCommands=true`, request-shaped messages and short follow-ups in an existing session can also trigger AI. This is only an activation gate, not a command selector; it cannot recognize every phrasing. Set it to `false` to require mention/reply. All paths obey the configured channel allowlist. Ordinary message replies are public; use `/chat` for private help.
 
-Public live-price replies contain only a bold price plus a small plain-text source/freshness line. There is no URL to generate a large website card, and embeds are explicitly suppressed. Numeric quote results and internal freshness metadata are not added to general AI chat history. Connective words such as `er`/`ar` are stripped when extracting tickers, so `SUI er price` requests SUI, not ER. Follow-ups accept ticker-shaped names outside the alias list. AI glossary selection is restricted to real glossary terms, so a token cannot become a “Choose a term” response. The existing public-request cooldown still applies. If neither venue has a valid fresh trade, public chat shows one short unavailable message, not a large explanatory card.
+Conversation memory is isolated by user/channel: at most 12 messages for 15 minutes, with 200 process-local sessions. Private `/chat` sessions are separate from public conversations. No broad channel history is collected by the production agent. Requests, scoped conversation context, quoted replies and tool data may be sent to Ollama and, on fallback, Groq. Prior prices are historical context, never valid fresh quotes. Sessions disappear on restart.
 
-**Natural-language message replies are public**, including the typing indicator. They cannot be ephemeral. Use slash commands for private results. Public pool/doc results show the first card with a slash-command hint for additional pages. AI tool-selection requests, when used, send the triggering text to the active AI provider (Ollama, or Groq during fallback); public conversation handling already uses the configured history policy.
+### Web access and limits
+
+Web search uses the documented [Ollama web-search API](https://docs.ollama.com/capabilities/web-search) and the existing `OLLAMA_API_KEY`. A free account/key is required; account allowances and rate limits apply. No paid subscription is required by this code, but unlimited free access is not guaranteed. Groq chat fallback does **not** restore an exhausted Ollama search allowance. Disable paid-account auto-top-up/spending if your budget must be zero.
+
+Page reading and arithmetic need no search key. The reader accepts public HTTPS websites only, validates all DNS addresses, pins the connection to an approved address, and revalidates redirects. Private/reserved networks, IP-literal URLs, credentials and nonstandard ports are blocked. Limits: 3 redirects, 512 KiB body, 15-second read budget, 10,000 extracted characters. No JavaScript execution, sign-in, CAPTCHA evasion or paywall bypass. Some sites cannot be read. Page text and snippets are untrusted data, not agent instructions; this is risk reduction, not a guarantee that AI is immune to prompt injection.
+
+The agent has at most 5 model rounds, 6 tool calls and 2 concurrent requests, with a 90-second cancellation signal for model/web operations. Existing market requests have their own HTTP timeouts. Public replies suppress website previews and mentions; verified tool-source links are appended for research. Slash results remain private, paginated and best-effort temporary.
 
 ## Clean command layout
 
@@ -118,7 +127,7 @@ Ollama Cloud · gpt-oss:120b
 Groq · qwen/qwen3.8-27b
 ```
 
-Both normal AI conversation and AI tool selection share this provider state. Recognized price questions, local knowledge search, glossary and other direct commands do not need AI credits.
+All agent conversation and tool selection share this provider state. Direct market, local-document and glossary slash commands do not need AI credits; natural-language requests do.
 
 - Ollama uses `https://ollama.com/v1/chat/completions` with its own adapter; this is not just a model-name change to Groq.
 - Groq uses the existing SDK and its separate API key/model.
@@ -159,11 +168,11 @@ No real project was supplied, so `knowledge/projects.json` starts empty. `/ask` 
 - **DEX Screener:** token pools, liquidity, FDV and trading data.
 - **GeckoTerminal:** recent pool feed, not every launch and not a verified-project directory.
 - **Local JSON/Markdown:** project knowledge. Curated local glossary. No database or embedding subscription.
-- **Optional AI:** Ollama Cloud primary and Groq/Qwen fallback for public chat and advanced tool selection. Account quotas, privacy terms and possible paid-account billing apply.
+- **Optional AI:** Ollama Cloud primary and Groq/Qwen fallback for public chat and advanced tool selection. Account quotas, privacy terms and possible paid-account billing apply. Web search uses Ollama’s separate allowance.
 
 No paid market API subscription is required by this code. Public API policies and availability can change; there is no guarantee of unlimited usage, commercial rights for all uses, real-time prices, or free hosting. Check current provider terms before deployment. Run on your own always-on computer to avoid a hosting subscription.
 
-Live exchange quotes bypass the bot cache (`no-store`) and share only concurrent in-flight requests. Other market responses are cached for 60 seconds, discovery for 90 seconds, and token searches for one hour. A conservative per-provider request scheduler, request coalescing, 12-second HTTP timeouts, 429 cooldowns, a five-second per-user cooldown, and a three-command concurrency limit reduce usage. Limits are **per process**, not distributed. Missing values are shown as N/A, not invented zeros. Market queries go to external providers; slash questions stay in local document search and do not enter public AI history.
+Live exchange quotes bypass the bot cache (`no-store`) and share only concurrent in-flight requests. Other market responses are cached for 60 seconds, discovery for 90 seconds, and token searches for one hour. A conservative per-provider request scheduler, request coalescing, 12-second HTTP timeouts, 429 cooldowns, a five-second per-user cooldown, and a three-command concurrency limit reduce usage. Limits are **per process**, not distributed. Missing values are shown as N/A, not invented zeros. Market queries go to external providers; `/ask` stays in local document search; `/chat` sends the private request to AI and keeps a separate per-user/channel session.
 
 ## Structure
 
@@ -171,10 +180,10 @@ Live exchange quotes bypass the bot cache (`no-store`) and share only concurrent
 src/
   index.js                    Wiring, login and shutdown
   config/                     Environment and runtime validation
-  ai/                         Shared provider failover, chat and tool selection
-  conversation/               In-memory public history and channel queue
+  ai/                         Bounded tool agent and shared provider failover
+  conversation/               Channel queue and legacy compatibility history
   discord/
-    commands.js               Seven slash-command definitions
+    commands.js               Ten slash-command definitions
     command-sync.js           Per-server command synchronization
     handlers.js               Existing public mention/reply handling
     web3-handler.js           Private commands, cooldowns and help
@@ -248,4 +257,4 @@ These settings govern application logs, not npm installation output, Node runtim
 
 ## Remaining operational boundaries
 
-Deploy **one process** today. Public AI conversation history and private page sessions are volatile; restart clears them. The original public chat observes non-bot messages in allowed channels, even without a mention; tell members this. Public chat context sent to the active AI provider contains display names and message text when AI is enabled. No attachment ingestion, message edit/delete synchronization, durable history, shared quota limits, or distributed coordination is implemented. No financial recommendations or token safety guarantees.
+Deploy **one process** today. Agent conversations and private page sessions are volatile; restart clears them. Only triggered requests enter agent memory, scoped by user/channel; there is no broad channel-history ingestion in production. Inform members that questions, quoted replies, recent scoped context and tool results may reach both AI providers. No attachment ingestion, message edit/delete synchronization, durable memory, distributed quota coordination, financial advice or token-safety guarantees.

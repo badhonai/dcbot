@@ -58,7 +58,7 @@ test('obsolete commands are replaced in this application guild set', async () =>
     const { sync, calls } = fixture(async () => [{ name: 'uns', description: 'Old command' }]);
     await sync.syncGuild(APP, GUILD_A);
     const written = calls.find(c => c[0] === 'put')[2].body;
-    assert.equal(written.length, 7); assert.ok(!written.some(c => c.name === 'uns'));
+    assert.equal(written.length, commands.length); assert.ok(!written.some(c => c.name === 'uns'));
 });
 test('manual discovery pages past 200 bot servers', async () => {
     const queries = [];

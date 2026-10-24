@@ -1,3 +1,5 @@
+> **Current architecture:** production uses the AI-first bounded agent described in [README](../README.md#ai-first-conversation-not-token-name-routing), with ten private slash commands including `/chat`, `/search`, `/read`. Historical routing/follow-up sections below describe superseded releases. The legacy router remains only for compatibility tests; production never falls back to it.
+
 # Web3 implementation notes
 
 ## Delivered

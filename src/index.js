@@ -3,11 +3,10 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { Client, GatewayIntentBits, Events } = require('discord.js');
 const { createModelClient } = require('./ai/provider-client');
 const { loadConfig } = require('./config');
-const { HistoryStore } = require('./conversation/history-store');
 const { ChannelQueue } = require('./conversation/channel-queue');
 const { Actions } = require('./features/actions');
-const { createIntentRouter } = require('./ai/intent-router');
-const { createAiService } = require('./ai/groq-service');
+const { createAgent } = require('./ai/agent');
+const { WebService } = require('./features/web');
 const { createHandlers } = require('./discord/handlers');
 const { PublicApi } = require('./integrations/public-api');
 const { MarketService } = require('./features/market');
@@ -30,14 +29,12 @@ async function main() {
     const queue = new ChannelQueue(config.maxPendingPerChannel);
     const replies = new PrivateReplies();
     const market = new MarketService(new PublicApi({ logger: log.child('market-api') }));
-    const actions = new Actions({ market, knowledge });
+    const web = new WebService({ apiKey: config.ollamaApiKey });
+    const actions = new Actions({ market, knowledge, web });
     const modelClient = createModelClient(config, { logger: log.child('ai') });
-    const router = createIntentRouter({ client: modelClient, config, logger: log.child('intent-router') });
-    const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, logger: log.child('commands') });
-    const handlers = createHandlers({ client, config, queue, router, actions, logger: log.child('chat'),
-        history: new HistoryStore(config.historyLength),
-        ai: modelClient ? createAiService(modelClient, config)
-            : { respond: async () => 'AI chat is not configured. Use /help for private Web3 commands.' } });
+    const agent = createAgent({ client: modelClient, actions, config, logger: log.child('agent') });
+    const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, agent, logger: log.child('commands') });
+    const handlers = createHandlers({ client, config, queue, agent, logger: log.child('chat') });
     client.once(Events.ClientReady, () => {
         log.info('Connected to Discord', { bot: client.user.tag, guilds: client.guilds.cache.size, slashReplies: 'private' });
         commandSync.syncAll(client.user.id, client.guilds.cache.keys()).catch(error => {

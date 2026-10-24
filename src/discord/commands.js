@@ -3,6 +3,9 @@ const text = (command, name, description, required = true) => command.addStringO
 const chains = [ ['Ethereum', 'ethereum'], ['Solana', 'solana'], ['Base', 'base'], ['BNB Chain', 'bsc'], ['Arbitrum', 'arbitrum'], ['Polygon', 'polygon'], ['Optimism', 'optimism'], ['Avalanche', 'avalanche'] ];
 const chain = command => command.addStringOption(o => o.setName('chain').setDescription('Choose a network').setRequired(true).addChoices(...chains.map(([name, value]) => ({ name, value }))));
 const commands = [
+    new SlashCommandBuilder().setName('chat').setDescription('Ask the AI agent to help with a task').addStringOption(o => o.setName('message').setDescription('Question, task or context').setRequired(true).setMaxLength(2000)),
+    text(new SlashCommandBuilder().setName('search').setDescription('Search the web with source links'), 'query', 'What should I search for?'),
+    new SlashCommandBuilder().setName('read').setDescription('Read a public webpage').addStringOption(o => o.setName('url').setDescription('Full HTTPS webpage URL').setRequired(true).setMaxLength(2000)),
     new SlashCommandBuilder().setName('help').setDescription('Commands & quick examples'),
     text(text(new SlashCommandBuilder().setName('ask').setDescription('Search approved project docs'), 'question', 'What would you like to know?'), 'project', 'Project ID (optional)', false),
     text(new SlashCommandBuilder().setName('official').setDescription('Approved project links'), 'project', 'Project ID (optional)', false),

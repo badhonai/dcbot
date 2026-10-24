@@ -7,7 +7,7 @@
 | Primary | Ollama Cloud | `gpt-oss:120b` | `OLLAMA_API_KEY` |
 | Fallback | Groq | `qwen/qwen3.8-27b` | `GROQ_API_KEY` |
 
-The same model client serves normal chat and optional tool selection. Actual market prices still come from the exchange APIs, not either model. Public message replies stay public; slash-command privacy is unchanged.
+The same model client serves normal agent chat and multi-step tool selection. Actual market prices still come from the exchange APIs, not either model. Public message replies stay public; slash-command privacy is unchanged.
 
 ## Enable on your host
 
@@ -15,11 +15,11 @@ The same model client serves normal chat and optional tool selection. Actual mar
 2. Set `OLLAMA_API_KEY` and the existing `GROQ_API_KEY` as private hosting variables or in your ignored `.env`.
 3. Pull the latest code and restart. No model download or Ollama daemon is needed.
 4. Confirm the console reports `AI providers ready`, primary `ollama`, model `gpt-oss:120b`, fallback `groq`.
-5. Test ordinary chat and an advanced tool-selection request in staging. Simple price questions may bypass AI entirely, so they do not prove the model connection works.
+5. Test ordinary chat and an advanced tool-selection request in staging. Normal-language price questions use AI; direct `/price` bypasses AI and does not prove the model connection works.
 
 Never put credentials in public Discord messages, repository files, issue/PR text or a downloadable ZIP. This release includes no real API keys. If only one key is configured, only that provider can answer AI requests.
 
-Optional `OLLAMA_MODEL` and `GROQ_MODEL` variables override `config.json`. `primaryMaxTokens` controls the Ollama output/reasoning budget (128–8192, default 1024). `maxCompletionTokens` remains the normal Groq chat limit. Keep the primary budget high enough to produce a final answer; GPT-OSS reasoning can consume budget/credits before visible text. We read final content/tool calls, not reasoning fields.
+Optional `OLLAMA_MODEL` and `GROQ_MODEL` variables override `config.json`. `primaryMaxTokens` controls the Ollama output/reasoning budget (128–8192, default 1024). The bounded agent requests 700 completion tokens per Groq round; legacy chat adapters retain their configured limits. Keep the primary budget high enough to produce a final answer; GPT-OSS reasoning can consume budget/credits before visible text. We read final content/tool calls, not reasoning fields.
 
 ## Failure behavior
 
@@ -42,3 +42,7 @@ Fallback may send the same question/history to both providers. Update community 
 - [Groq supported models](https://console.groq.com/docs/models): model ID availability; Qwen is a preview model and can change.
 
 The implementation was validated with mocked provider responses and the full offline test suite, not real account credentials or actual exhausted-credit events.
+
+## Agent web tools
+
+See [AI-first conversation and web limits](../README.md#ai-first-conversation-not-token-name-routing). `OLLAMA_API_KEY` is also used for the official `https://ollama.com/api/web_search` endpoint. Free-account search allowance is separate from model-provider fallback; there is no Groq search fallback. Protected public HTTPS page reading and the arithmetic parser do not require a search key. Tool decisions are AI-first, not the legacy deterministic router. Direct slash tools remain available without AI when their own dependencies permit.

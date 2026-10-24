@@ -27,9 +27,23 @@ function detectIntent(input) {
     }
     return null;
 }
+// Follow-ups use only the previous action type, never its price/result text.
+function detectPriceFollowUp(input, previous) {
+    if (previous?.command !== 'price') return null;
+    const text = input.replace(/<@!?\d+>/g, '').trim().toLowerCase();
+    if (text.length > 120 || /\b(yesterday|tomorrow|historical|predict|forecast)\b|last (?:week|month|year)|next (?:week|month|year)|in 20\d{2}/.test(text)) return null;
+    const words = text.match(/[a-z0-9-]+/g) || [];
+    const symbols = [...new Set(words.filter(w => Object.hasOwn(ALIASES, w)).map(w => ALIASES[w]))];
+    if (symbols.length !== 1) return null;
+    const remainder = words.filter(w => !Object.hasOwn(ALIASES, w));
+    const allowed = new Set(['ar', 'er', 'r', 'and', 'also', 'what', 'about', 'how', 'then', 'please', 'koto', 'dam', 'ta', 'price']);
+    if (remainder.some(w => !allowed.has(w))) return null;
+    return { command: 'price', args: { token: symbols[0], mode: previous.args?.mode || 'live' } };
+}
 function createIntentRouter({ client, config, logger = createLogger('intent-router') } = {}) {
     return {
         detect: detectIntent,
+        followUp: detectPriceFollowUp,
         async resolve(input) {
             const local = detectIntent(input);
             if (local || !client) return local;
@@ -50,4 +64,4 @@ function createIntentRouter({ client, config, logger = createLogger('intent-rout
         },
     };
 }
-module.exports = { createIntentRouter, detectIntent };
+module.exports = { createIntentRouter, detectIntent, detectPriceFollowUp };

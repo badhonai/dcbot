@@ -44,6 +44,12 @@ Common price, pool-discovery, glossary, pool-address and official-link requests 
 
 Set `naturalLanguageCommands` to `false` in `config.json` to require a mention/reply for public chat requests; slash commands are unaffected. Otherwise explicit recognized requests can trigger a response without mentioning the bot. Ordinary unrelated messages do not trigger AI calls. Both paths stay restricted to configured channels, with bounded tool concurrency and public-request cooldowns.
 
+### Short follow-ups and minimal price replies
+
+After a price request, a short follow-up such as `Ar eth er?`, `and ETH?`, or `what about Solana?` fetches a **new quote** instead of asking general AI to repeat a stored value. Implicit context is scoped to the same user/channel and expires after two minutes. Replying directly to a recognizable bot price message can restore the action type after a restart; it never reuses the number from that message.
+
+Public live-price replies contain only a bold price plus a small plain-text source/freshness line. There is no URL to generate a large website card, and embeds are explicitly suppressed. Numeric quote results and internal freshness metadata are not added to general AI chat history. The existing public-request cooldown still applies.
+
 **Natural-language message replies are public**, including the typing indicator. They cannot be ephemeral. Use slash commands for private results. Public pool/doc results show the first card with a slash-command hint for additional pages. AI tool-selection requests, when used, send the triggering text to Groq; public conversation handling already uses the configured history policy.
 
 ## Clean command layout

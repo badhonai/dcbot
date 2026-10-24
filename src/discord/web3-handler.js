@@ -1,30 +1,19 @@
 const { MessageFlags } = require('discord.js');
 const { createLogger, errorDetails } = require('../utils/logger');
 const { explain } = require('../features/glossary');
-const HELP = `**Web3 assistant — help**
-All slash-command results are private to you. Long results have Previous/Next buttons. Dismiss anytime; automatic deletion is attempted after 10 minutes while the bot is running.
-
-**Project knowledge**
-• /ask question:<question> project:<optional ID> — matching excerpts from curator-approved local documents, with sources and review dates. No invented project facts.
-• /official project:<optional ID> — curator-approved links.
-
-**Market data — no paid API key**
-• /price token:BTC — latest available USD quote. Ambiguous symbols return exact IDs to choose from.
-• /price token:btc-bitcoin — look up an exact CoinPaprika ID.
-• /pair chain:ethereum address:<token contract> — up to five base-token pools ranked by liquidity. This takes a TOKEN address, not a pool address.
-• /newpairs chain:solana — up to eight recently created pools from GeckoTerminal; not verified new projects or a complete launch feed.
-
-**Learn**
-• /explain term:slippage — curated Web3 glossary.
-• /help — this guide.
-
-**Chains**
-ethereum, solana, base, bsc, arbitrum, polygon, optimism, avalanche
-
-**Privacy and limits**
-Slash questions do not enter channel conversation history. Market queries go to CoinPaprika, DEX Screener or GeckoTerminal. No wallet connection, trading, moderation or admin powers. Cached quotes can be delayed; providers have rate limits and may be unavailable. New pools can be scams. Not financial advice.
-
-Normal @mention/reply conversations remain PUBLIC and use Groq when configured; Discord cannot make ordinary message replies ephemeral. For private information, use slash commands. The bot currently observes allowed-channel messages for public chat context.`;
+const { card, pages, notice } = require('../utils/cards');
+const HELP = pages(
+    card('Command guide', 'Choose a command below. All results are private.', { fields: [
+        { name: 'Markets', value: '`/price` Token price\n`/pair` Pools & liquidity\n`/newpairs` Recent pools (unverified)' },
+        { name: 'Project & learning', value: '`/ask` Search approved docs\n`/official` Project links\n`/explain` Web3 glossary' },
+        { name: 'Try it', value: '`/price token:BTC`\n`/explain term:slippage`' },
+    ] }),
+    card('Good to know', '', { fields: [
+        { name: 'Privacy', value: 'Slash results: only you. Dismiss anytime. Auto-deletion is best effort while online.\nNormal @mention replies are public.' },
+        { name: 'Networks', value: 'Ethereum · Solana · Base · BSC\nArbitrum · Polygon · Optimism · Avalanche' },
+        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Cached data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
+    ] }),
+);
 function createWeb3Handler({ config, market, knowledge, replies, logger = createLogger('commands') }) {
     const cooldowns = new Map(); let active = 0;
     return async function onInteraction(interaction) {
@@ -34,14 +23,14 @@ function createWeb3Handler({ config, market, knowledge, replies, logger = create
             }
             if (!interaction.isChatInputCommand()) return;
             if (!['help','ask','official','price','pair','newpairs','explain'].includes(interaction.commandName)) return;
-            if (!config.channels.includes(interaction.channelId)) {
-                await interaction.reply({ content: 'Commands are enabled only in configured bot channels.', flags: MessageFlags.Ephemeral }); return;
-            }
             // Acknowledge privately BEFORE external work. Every result/error stays on this interaction.
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            if (!config.channels.includes(interaction.channelId)) {
+                await replies.send(interaction, notice('Use a bot channel', 'Commands are enabled in the configured channels only.')); return;
+            }
             const now = Date.now(); const user = interaction.user.id;
             if ((cooldowns.get(user) || 0) > now || active >= 3) {
-                await replies.send(interaction, 'Bot busy or command cooldown active. Please try again in a few seconds.'); return;
+                await replies.send(interaction, notice('One moment', 'Bot busy or cooldown active. Try again in a few seconds.')); return;
             }
             if (cooldowns.size >= 1000) {
                 for (const [id, until] of cooldowns) if (until <= now) cooldowns.delete(id);
@@ -70,10 +59,11 @@ function createWeb3Handler({ config, market, knowledge, replies, logger = create
             const expectedInput = /^(Unsupported chain|Invalid token address|Use a token name|No USD quote|Choose a project|No approved project knowledge)/.test(error.message);
             if (expectedInput) logger.debug?.('Command needs different input or project setup', { command: interaction.commandName });
             else logger.error('Private command failed', { command: interaction.commandName, ...errorDetails(error) });
-            const content = safe ? error.message : 'Could not complete that request. The data service may be unavailable; please try again later.';
+            const content = safe ? error.message : 'The service is unavailable. Please try again shortly.';
+            const response = notice('Couldn’t complete request', content);
             try {
-                if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [], allowedMentions: { parse: [] } });
-                else await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+                if (interaction.deferred || interaction.replied) await replies.send(interaction, response);
+                else await interaction.reply({ embeds: response.pages, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
             } catch { /* Expired interaction or lost channel access. Never fall back to a public message. */ }
         }
     };

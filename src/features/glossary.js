@@ -1,3 +1,4 @@
+const { card, pages, notice } = require('../utils/cards');
 const glossary = {
     liquidity: 'Liquidity is the ease of trading an asset without substantially moving its price. In a DEX pool, reserves provide liquidity. High displayed liquidity is not a guarantee of safety or that you can sell.',
     slippage: 'Slippage is the difference between an expected trade price and its execution price. Low liquidity, large trades, volatility and transaction ordering can increase it. A slippage tolerance is a limit, not a guaranteed loss.',
@@ -10,6 +11,6 @@ const glossary = {
 };
 function explain(term) {
     const key = term.toLowerCase().trim().replace(/[-_]/g, ' ');
-    return glossary[key] ? `**${key}**\n${glossary[key]}\n\nCurated educational glossary; not personalized financial advice.` : `Available terms: ${Object.keys(glossary).join(', ')}.`;
+    return glossary[key] ? pages(card(key.charAt(0).toUpperCase() + key.slice(1), glossary[key], { footer: 'Web3 glossary · Educational, not financial advice' })) : notice('Choose a term', Object.keys(glossary).map(term => `\`${term}\``).join(' · '));
 }
 module.exports = { explain };

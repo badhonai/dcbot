@@ -1,3 +1,4 @@
+const { card, pages, notice, clip, safeText } = require('../utils/cards');
 const fs = require('node:fs');
 const path = require('node:path');
 const tokenize = text => [...new Set(text.toLowerCase().match(/[a-z0-9]{3,}/g) || [])].filter(t => !['the','what','how','does','this','that','and','for','are','with','project','about'].includes(t));
@@ -23,16 +24,22 @@ class KnowledgeService {
     }
     official(id) {
         const p = this.select(id);
-        return `**${p.name} — curator-approved links**\n` + (p.links || []).map(l => `• ${l.label}: ${l.url}`).join('\n') + '\nApproval is by the bot owner, not an independent security audit.';
+        const links = p.links || [];
+        if (!links.length) return notice('No links added', 'The owner has not added official links for this project.');
+        const cards = [];
+        for (let i = 0; i < links.length; i += 6) cards.push(card(`${safeText(p.name)} · Official links`, links.slice(i, i + 6).map(l => `• [${safeText(l.label)}](${l.url.replace(/[()\s]/g, c => encodeURIComponent(c))})`).join('\n'), { footer: 'Owner-approved · Not an independent audit' }));
+        return pages(cards);
     }
     ask(id, question) {
         const p = this.select(id); const terms = tokenize(question);
         const hits = (p.documents || []).flatMap(d => d.text.split(/\n\s*\n/).map(text => ({ text, d, score: terms.filter(t => tokenize(text).includes(t)).length })))
             .filter(h => h.score > 0).sort((a,b) => b.score - a.score).slice(0, 4);
-        if (!hits.length) return 'I could not find that in the approved documents. Try more specific keywords or contact the project team.';
-        return `**${p.name} — approved document excerpts**\nThese are matching passages, not an AI-generated conclusion. Check sources for context and current details.\n\n` + hits.map(h =>
-            `${h.text.slice(0, 2400)}${h.text.length > 2400 ? '… [excerpt truncated]' : ''}\nSource: ${h.d.source}\nDocument reviewed: ${h.d.updatedAt}`
-        ).join('\n\n');
+        if (!hits.length) return notice('No matching passage', 'Try a more specific keyword. No answer was found in the approved docs.');
+        return pages(hits.map(h => card(`${safeText(p.name)} · Project docs`, clip(h.text, 650), {
+            url: h.d.source,
+            fields: [{ name: 'Source', value: `[Read original](${h.d.source.replace(/[()\s]/g, c => encodeURIComponent(c))}) · Reviewed ${safeText(h.d.updatedAt)}` }],
+            footer: 'Approved document excerpt · Not AI-generated',
+        })));
     }
 }
 module.exports = { KnowledgeService };

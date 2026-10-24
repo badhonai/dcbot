@@ -1,20 +1,26 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { randomBytes } = require('node:crypto');
 const { splitMessage } = require('../utils/split-message');
+const { card } = require('../utils/cards');
 const safeMentions = { parse: [], repliedUser: false };
 class PrivateReplies {
     constructor({ ttlMs = 10 * 60 * 1000, maxSessions = 200 } = {}) {
         this.ttlMs = ttlMs; this.maxSessions = maxSessions; this.sessions = new Map();
     }
     controls(id, page, count) {
-        return [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`private:${id}:previous`).setLabel('Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+        const buttons = [];
+        if (count > 1) buttons.push(
+            new ButtonBuilder().setCustomId(`private:${id}:previous`).setLabel('Back').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
             new ButtonBuilder().setCustomId(`private:${id}:next`).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(page === count - 1),
-            new ButtonBuilder().setCustomId(`private:${id}:close`).setLabel('Dismiss').setStyle(ButtonStyle.Danger),
-        )];
+        );
+        buttons.push(new ButtonBuilder().setCustomId(`private:${id}:close`).setLabel('Dismiss').setStyle(ButtonStyle.Secondary));
+        return [new ActionRowBuilder().addComponents(buttons)];
     }
     payload(id, session) {
-        return { content: `${session.pages[session.page]}\n\n— ${session.page + 1}/${session.pages.length} · Private · Auto-dismiss ~10 min`,
+        const current = session.pages[session.page];
+        const status = [session.pages.length > 1 ? `${session.page + 1}/${session.pages.length}` : '', 'Only you', `~${Math.round(this.ttlMs / 60000)} min`].filter(Boolean).join(' · ');
+        if (session.plain) return { content: `${current.text}\n\n-# ${status}`, embeds: [], components: this.controls(id, session.page, session.pages.length), allowedMentions: safeMentions };
+        return { content: '', embeds: [{ ...current, footer: { text: [current.footer?.text, status].filter(Boolean).join(' · ').slice(0, 300) } }],
             components: this.controls(id, session.page, session.pages.length), allowedMentions: safeMentions };
     }
     async send(interaction, text) {
@@ -24,8 +30,14 @@ class PrivateReplies {
             old.interaction.deleteReply().catch(() => {});
         }
         const id = randomBytes(12).toString('hex');
-        const pages = splitMessage(String(text).slice(0, 20000) || 'No results.', 1800);
-        const session = { pages, page: 0, owner: interaction.user.id, interaction };
+        let pages = Array.isArray(text?.pages) && text.pages.length ? text.pages.slice(0, 20) :
+            splitMessage(String(text || 'No results.').slice(0, 20000), 900).map(value => card('Web3 assistant', value));
+        const plain = interaction.appPermissions?.has(PermissionFlagsBits.EmbedLinks) === false;
+        if (plain) pages = pages.flatMap(page => {
+            const body = [`**${page.title}**`, page.description, ...(page.fields || []).map(f => `**${f.name}**\n${f.value}`), page.url ? `[Source](${page.url})` : '', page.footer?.text, page.timestamp ? `Fetched: ${page.timestamp}` : ''].filter(Boolean).join('\n\n');
+            return splitMessage(body, 1600).map(text => ({ text }));
+        });
+        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction };
         this.sessions.set(id, session);
         session.timer = setTimeout(() => {
             this.sessions.delete(id);
@@ -40,7 +52,7 @@ class PrivateReplies {
         const [, id, action] = interaction.customId.split(':');
         const session = this.sessions.get(id);
         if (!session || session.owner !== interaction.user.id) {
-            await interaction.reply({ content: 'This private response expired or belongs to another user. Run the command again.', flags: MessageFlags.Ephemeral });
+            await interaction.reply({ content: 'This response expired or isn’t yours. Run the command again.', flags: MessageFlags.Ephemeral });
             return;
         }
         if (!['previous', 'next', 'close'].includes(action)) return;

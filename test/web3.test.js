@@ -10,6 +10,7 @@ const { KnowledgeService } = require('../src/features/knowledge');
 const { PrivateReplies } = require('../src/discord/private-replies');
 const { createWeb3Handler } = require('../src/discord/web3-handler');
 const { commands } = require('../src/discord/commands');
+const textOf = value => JSON.stringify(value);
 const { explain } = require('../src/features/glossary');
 
 test('seven informational commands; no moderation command', () => {
@@ -32,15 +33,15 @@ test('429 failures start a provider cooldown and do not enter cache', async () =
     assert.equal(api.cache.size, 0);
 });
 test('price ID returns deterministic provider values, attribution and timestamps', async () => {
-    const service = new MarketService({ get: async () => ({ fetchedAt: 'now', data: { id: 'btc-bitcoin', name: 'Bitcoin', symbol: 'BTC', last_updated: 'then', quotes: { USD: { price: 100, market_cap: 1000 } } } }) });
+    const service = new MarketService({ get: async () => ({ fetchedAt: '2026-10-24T10:00:00Z', data: { id: 'btc-bitcoin', name: 'Bitcoin', symbol: 'BTC', last_updated: 'then', quotes: { USD: { price: 100, market_cap: 1000 } } } }) });
     const result = await service.price('btc-bitcoin');
-    assert.match(result, /\$100/); assert.match(result, /coinpaprika/); assert.match(result, /Fetched: now/);
+    assert.match(textOf(result), /\$100/); assert.match(result.pages[0].url, /coinpaprika/); assert.equal(result.pages[0].timestamp, '2026-10-24T10:00:00.000Z');
 });
 test('ambiguous symbols return IDs instead of guessing a token', async () => {
     const service = new MarketService({ get: async () => ({ data: { currencies: [
         { id: 'foo-one', name: 'One', symbol: 'FOO', is_active: true }, { id: 'foo-two', name: 'Two', symbol: 'FOO', is_active: true },
     ] } }) });
-    assert.match(await service.price('foo'), /Multiple matches/);
+    assert.match(textOf(await service.price('foo')), /Multiple matches/);
 });
 test('unique symbol resolves to a ticker automatically', async () => {
     const urls = [];
@@ -49,7 +50,7 @@ test('unique symbol resolves to a ticker automatically', async () => {
         return url.includes('/search') ? { data: { currencies: [{ id: 'btc-bitcoin', symbol: 'BTC', is_active: true }] } } :
             { data: { name: 'Bitcoin', quotes: { USD: { price: 1 } } } };
     } });
-    assert.match(await service.price('BTC'), /Bitcoin/); assert.equal(urls.length, 2);
+    assert.match(textOf(await service.price('BTC')), /Bitcoin/); assert.equal(urls.length, 2);
 });
 test('unknown chains and malformed addresses are rejected before any request', async () => {
     const service = new MarketService({ get: () => { throw new Error('should not fetch'); } });
@@ -61,7 +62,7 @@ test('unknown chains and malformed addresses are rejected before any request', a
 test('new pools are explicitly not endorsed projects', async () => {
     const service = new MarketService({ get: async () => ({ fetchedAt: 'now', data: { data: [{ attributes: { name: '@everyone *FAKE*', address: 'abc', reserve_in_usd: null } }] } }) });
     const text = await service.newpairs('ethereum');
-    assert.match(text, /NOT verified/); assert.match(text, /Liquidity: N\/A/); assert.ok(!text.includes('@everyone'));
+    assert.match(textOf(text), /Unverified pools/); assert.match(textOf(text), /N\/A/); assert.ok(!textOf(text).includes('@everyone'));
 });
 test('knowledge requires configured sources and returns cited excerpts, not guesses', t => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dcbot-'));
@@ -69,10 +70,10 @@ test('knowledge requires configured sources and returns cited excerpts, not gues
     fs.writeFileSync(path.join(dir, 'doc.md'), 'Staking tokens requires a seven-day lock.\n\nUnrelated paragraph.');
     fs.writeFileSync(path.join(dir, 'projects.json'), JSON.stringify([{ id: 'demo', name: 'Demo', links: [{ label: 'Docs', url: 'https://example.com/docs' }], documents: [{ file: 'doc.md', source: 'https://example.com/docs', updatedAt: '2026-10-24' }] }]));
     const knowledge = new KnowledgeService(dir);
-    assert.match(knowledge.ask(null, 'staking'), /seven-day/);
-    assert.match(knowledge.ask('demo', 'staking'), /https:\/\/example.com\/docs/);
-    assert.match(knowledge.ask('demo', 'unicorn'), /could not find/);
-    assert.match(knowledge.official(), /curator-approved/);
+    assert.match(textOf(knowledge.ask(null, 'staking')), /seven-day/);
+    assert.match(textOf(knowledge.ask('demo', 'staking')), /https:\/\/example.com\/docs/);
+    assert.match(textOf(knowledge.ask('demo', 'unicorn')), /No matching passage/);
+    assert.match(textOf(knowledge.official()), /Owner-approved/);
     assert.throws(() => knowledge.select('absent'), /Choose a project/);
 });
 test('default knowledge never pretends to know an unconfigured project', () => {
@@ -80,8 +81,8 @@ test('default knowledge never pretends to know an unconfigured project', () => {
     assert.throws(() => knowledge.ask(null, 'tokenomics'), /No approved/);
 });
 test('curated glossary needs no model or external API', () => {
-    assert.match(explain('market-cap'), /circulating supply/);
-    assert.match(explain('unknown'), /Available terms/);
+    assert.match(textOf(explain('market-cap')), /circulating supply/);
+    assert.match(textOf(explain('unknown')), /Choose a term/);
 });
 function interaction(name = 'help', user = 'u') {
     const events = [];
@@ -97,7 +98,8 @@ function interaction(name = 'help', user = 'u') {
 test('private results paginate below Discord size limit and enforce owner', async t => {
     const replies = new PrivateReplies(); t.after(() => replies.destroy());
     const i = interaction(); const id = await replies.send(i, 'x'.repeat(6000));
-    assert.ok(i.events[0][1].content.length < 2000);
+    assert.equal(i.events[0][1].content, '');
+    assert.ok(i.events[0][1].embeds[0].description.length <= 900);
     let denied;
     await replies.onButton({ customId: `private:${id}:next`, user: { id: 'other' }, reply: async p => { denied = p; } });
     assert.equal(denied.flags, MessageFlags.Ephemeral); assert.equal(replies.sessions.get(id).page, 0);
@@ -117,17 +119,19 @@ test('help is deferred privately before result, with no public sends', async t =
     const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies, market: {}, knowledge: {} });
     const i = interaction(); await handler(i);
     assert.equal(i.events[0][0], 'defer'); assert.equal(i.events[0][1].flags, MessageFlags.Ephemeral);
-    assert.match(i.events[1][1].content, /Web3 assistant/);
+    assert.equal(i.events[1][1].embeds[0].title, 'Command guide');
 });
-test('command failures remain private and never expose raw internals', async () => {
-    const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies: {}, market: { price: async () => { throw new Error('secret-token'); } }, knowledge: {}, logger: { error() {} } });
+test('command failures remain private and never expose raw internals', async t => {
+    const replies = new PrivateReplies(); t.after(() => replies.destroy());
+    const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies, market: { price: async () => { throw new Error('secret-token'); } }, knowledge: {}, logger: { error() {} } });
     const i = interaction('price'); await handler(i);
     assert.equal(i.events[0][1].flags, MessageFlags.Ephemeral);
-    assert.ok(!i.events[1][1].content.includes('secret-token'));
+    assert.ok(!textOf(i.events[1][1]).includes('secret-token'));
+    assert.equal(i.events[1][1].embeds[0].title, 'Couldn’t complete request');
 });
 test('rapid repeat commands get a private cooldown reply', async () => {
     const results = [];
     const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies: { send: async (_, text) => results.push(text) }, market: {}, knowledge: {} });
     await handler(interaction()); await handler(interaction());
-    assert.match(results[1], /cooldown/);
+    assert.match(textOf(results[1]), /cooldown/);
 });

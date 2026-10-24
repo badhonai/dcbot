@@ -24,7 +24,7 @@ test('registers every unique server, not just a single configured ID', async () 
 });
 test('skips unchanged commands despite Discord-added IDs and default fields', async () => {
     const remote = commands.map(c => ({ ...c, id: 'remote', application_id: APP, version: '1', type: 1, nsfw: false, default_member_permissions: null,
-        options: c.options?.map(o => ({ ...o, required: o.required ?? false, autocomplete: false })) }));
+        options: c.options?.map(o => ({ ...o, required: o.required ?? false, autocomplete: false, ...(o.choices ? { choices: o.choices.map(c => ({ ...c, name_localizations: null })) } : {}) })) }));
     const { sync, calls } = fixture(async () => remote.reverse());
     const result = await sync.syncGuild(APP, GUILD_A);
     assert.equal(result.status, 'unchanged'); assert.equal(calls.length, 1);

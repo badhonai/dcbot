@@ -5,7 +5,7 @@ const { createLogger, errorDetails } = require('../utils/logger');
 function normalizeOption(option) {
     const result = { type: option.type, name: option.name, description: option.description, required: option.required ?? false };
     for (const key of ['autocomplete', 'choices', 'channel_types', 'min_value', 'max_value', 'min_length', 'max_length']) {
-        if (option[key] !== undefined && option[key] !== null && option[key] !== false) result[key] = option[key];
+        if (option[key] !== undefined && option[key] !== null && option[key] !== false) result[key] = key === 'choices' ? option[key].map(choice => ({ name: choice.name, value: choice.value })) : option[key];
     }
     result.options = (option.options || []).map(normalizeOption);
     return result;

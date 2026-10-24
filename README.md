@@ -19,11 +19,25 @@ Supported chain names: `ethereum` (also `eth`), `solana`, `base`, `bsc`, `arbitr
 
 ### Private, temporary results
 
-All slash results are **ephemeral**: visible only to the person invoking the command. Long results use Previous/Next buttons, not public message spam. Dismiss deletes the response. The bot attempts automatic deletion after 10 minutes while it remains online. Discord display behavior and application restarts can prevent exact deletion timing. Ephemeral is not end-to-end encryption, and does not prevent screenshots.
+All slash results are **ephemeral**: visible only to the person invoking the command. Results use compact Discord embed cards. Multi-page results show Back/Next buttons; single-page results show only Dismiss. No public message spam. Dismiss deletes the response. The bot attempts automatic deletion after 10 minutes while it remains online. Discord display behavior and application restarts can prevent exact deletion timing. Ephemeral is not end-to-end encryption, and does not prevent screenshots.
 
-Pagination is owner-checked and process-local, so buttons expire on restart. There are at most 200 active private result sessions; oldest sessions are dismissed when capacity is reached. Results are capped at 20,000 characters. Errors never fall back to a public channel message.
+Pagination is owner-checked and process-local, so buttons expire on restart. There are at most 200 active private result sessions; oldest sessions are dismissed when capacity is reached. Text fallback input is capped at 20,000 characters; structured results are capped at 20 cards. Cards keep complete records together instead of splitting them mid-sentence. Errors never fall back to a public channel message.
 
 **Ordinary mentions/replies remain public.** Discord does not support ephemeral responses to normal messages. Use slash commands for private results.
+
+## Clean command layout
+
+- **Help:** one short command menu, with privacy/source details on a second page.
+- **Price:** price and 24h change first; volume and market cap in compact fields. Large totals use `$1.23M` / `$1.23B` notation.
+- **Pools:** one complete pool per card, ranked by liquidity; copyable token contract and clickable source title.
+- **Recent pools:** two entries per page, with short risk labels and chart links.
+- **Project docs:** one matching excerpt per page, capped at 650 characters, with its source and review date. Truncated excerpts end with an ellipsis; use the source for full context.
+- **Official links:** labeled clickable links, up to six per page.
+- **Glossary and errors:** short, consistent cards without repeated paragraphs.
+
+Slash-menu descriptions are short; network and glossary options use dropdown choices instead of long instruction strings.
+
+Privacy/expiry/page status lives in the footer instead of the main text. Timestamps use Discord's local/relative rendering where possible. Source links and risk labels are retained. **Embed Links** permission is recommended; without it the bot falls back to private text. No administrator/moderation permissions are needed.
 
 ## Setup
 
@@ -56,7 +70,7 @@ These are **server IDs**, not channel IDs. `DISCORD_GUILD_IDS` takes precedence 
 
 The shared `config.json` channel allowlist still controls where replies are permitted. Add the relevant channels from **each server**. Commands may appear elsewhere but will respond with a private channel-disabled notice. If they do not appear after a successful sync, refresh Discord and check installation scopes, Use Application Commands permission and Server Settings → Integrations restrictions.
 
-Install using `bot` and `applications.commands` scopes. Grant only View Channel, Send Messages, and Read Message History for the existing public chat behavior. Threads may require Send Messages in Threads. Enable Message Content Intent for public chat in the developer portal. **No Administrator or Manage Messages permission is required.** Commands are restricted to configured channels; list thread IDs explicitly.
+Install using `bot` and `applications.commands` scopes. Grant only View Channel, Send Messages, Embed Links, and Read Message History for the existing public chat behavior. Threads may require Send Messages in Threads. Enable Message Content Intent for public chat in the developer portal. **No Administrator or Manage Messages permission is required.** Commands are restricted to configured channels; list thread IDs explicitly.
 
 ### Optional AI chat
 
@@ -105,7 +119,7 @@ src/
     command-sync.js           Per-server command synchronization
     handlers.js               Existing public mention/reply handling
     web3-handler.js           Private commands, cooldowns and help
-    private-replies.js        Ephemeral pagination, ownership and expiry
+    private-replies.js        Private embed cards, pagination and expiry
   features/
     knowledge.js              Local curated project search and official links
     market.js                 Market queries, chain mapping and formatting

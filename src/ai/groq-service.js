@@ -7,7 +7,7 @@ function createAiService(client, config) {
         async respond(history) {
             const completion = await client.chat.completions.create({
                 model: config.model,
-                messages: [{ role: 'system', content: config.systemPrompt }, ...history],
+                messages: [{ role: 'system', content: config.systemPrompt + '\nOperational rule: Never invent current prices, live market data or recent pool listings. A prior price in conversation history is only a historical snapshot. If no fresh tool result is available, direct the user to /price or ask which token. Do not claim to have fetched or executed a tool. Keep ordinary replies concise; never output internal reasoning or think blocks.' }, ...history],
                 temperature: config.temperature,
                 max_completion_tokens: config.maxCompletionTokens,
             });

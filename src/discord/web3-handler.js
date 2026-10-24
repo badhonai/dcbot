@@ -1,20 +1,21 @@
 const { MessageFlags } = require('discord.js');
 const { createLogger, errorDetails } = require('../utils/logger');
+const { SPECS } = require('../features/actions');
 const { explain } = require('../features/glossary');
 const { card, pages, notice } = require('../utils/cards');
 const HELP = pages(
     card('Command guide', 'Choose a command below. All results are private.', { fields: [
-        { name: 'Markets', value: '`/price` Token price\n`/pair` Pools & liquidity\n`/newpairs` Recent pools (unverified)' },
+        { name: 'Markets', value: '`/price` Fresh exchange quote\n`/pair` Pools & liquidity\n`/newpairs` Recent pools (unverified)' },
         { name: 'Project & learning', value: '`/ask` Search approved docs\n`/official` Project links\n`/explain` Web3 glossary' },
         { name: 'Try it', value: '`/price token:BTC`\n`/explain term:slippage`' },
     ] }),
     card('Good to know', '', { fields: [
         { name: 'Privacy', value: 'Slash results: only you. Dismiss anytime. Auto-deletion is best effort while online.\nNormal @mention replies are public.' },
         { name: 'Networks', value: 'Ethereum · Solana · Base · BSC\nArbitrum · Polygon · Optimism · Avalanche' },
-        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Cached data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
+        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Live quotes: Coinbase Exchange. Other data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
     ] }),
 );
-function createWeb3Handler({ config, market, knowledge, replies, logger = createLogger('commands') }) {
+function createWeb3Handler({ config, market, knowledge, replies, actions, logger = createLogger('commands') }) {
     const cooldowns = new Map(); let active = 0;
     return async function onInteraction(interaction) {
         try {
@@ -41,11 +42,14 @@ function createWeb3Handler({ config, market, knowledge, replies, logger = create
             try {
                 const option = name => interaction.options.getString(name);
                 let result;
-                switch (interaction.commandName) {
+                if (actions && interaction.commandName !== 'help') {
+                    const args = Object.fromEntries(Object.keys(SPECS[interaction.commandName].properties).map(name => [name, option(name)]).filter(([, value]) => value));
+                    result = await actions.execute({ command: interaction.commandName, args });
+                } else switch (interaction.commandName) {
                     case 'help': result = HELP; break;
                     case 'ask': result = knowledge.ask(option('project'), option('question')); break;
                     case 'official': result = knowledge.official(option('project')); break;
-                    case 'price': result = await market.price(option('token')); break;
+                    case 'price': result = await market.price(option('token'), { mode: option('mode') || 'live' }); break;
                     case 'pair': result = await market.pair(option('chain'), option('address')); break;
                     case 'newpairs': result = await market.newpairs(option('chain')); break;
                     case 'explain': result = explain(option('term')); break;

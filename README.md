@@ -9,8 +9,8 @@ An informational community member, **not a moderator**. No administrator permiss
 | `/help` | Commands, privacy, data sources and limitations |
 | `/ask question:… project:…` | Search curated project docs; return matching excerpts and sources |
 | `/official project:…` | Owner-approved project links |
-| `/price token:BTC` | Latest USD price, 24h change/volume, market cap, timestamps |
-| `/price token:btc-bitcoin` | Resolve a token using its exact CoinPaprika ID |
+| `/price token:BTC` | Fresh Coinbase Exchange USD last-trade quote; no bot cache |
+| `/price token:btc-bitcoin mode:market` | Delayed aggregate market stats from CoinPaprika |
 | `/pair chain:ethereum address:…` | Up to five base-token pools for a **token** contract, ordered by liquidity |
 | `/newpairs chain:solana` | Up to eight recently created pools; NOT verified new projects |
 | `/explain term:slippage` | Curated Web3 glossary without AI costs |
@@ -25,10 +25,31 @@ Pagination is owner-checked and process-local, so buttons expire on restart. The
 
 **Ordinary mentions/replies remain public.** Discord does not support ephemeral responses to normal messages. Use slash commands for private results.
 
+## Natural-language requests and fresh quotes
+
+In allowed channels, members can ask directly:
+
+```text
+Member: whats the live btc price?
+Bot:    [typing…]
+Bot:    BTC: $80,532.63
+        Coinbase · trade 2s ago
+```
+
+Illustrative value only. The displayed value comes from a fresh exchange request, never AI memory. The bot rejects trades older than 30 seconds, missing timestamps and invalid prices. If the exchange is unavailable, the product is unlisted, or trading is too quiet to meet the freshness check, it says so instead of presenting delayed data as live. A fresh REST request is **not** a tick-by-tick stream or a guaranteed executable price. The quote is Coinbase's USD last trade, not a market-wide average. Prices can change immediately afterward.
+
+Supported symbol requests are attempted as Coinbase `<SYMBOL>-USD` products, with aliases for common names (Bitcoin/BTC, Ethereum/ETH, Solana/SOL, etc.). Not every token is listed. For broader coverage and aggregate statistics use `/price token:<CoinPaprika ID> mode:market`; that data is clearly marked as delayed and is never an automatic live-price fallback.
+
+Common price, pool-discovery, glossary, pool-address and official-link requests are recognized locally without AI tokens. For less obvious requests **addressed to the bot by mention/reply**, optional Groq function calling chooses one validated read-only action. It needs a tool-capable model available in your account. Unsupported AI routing falls back to ordinary chat; it does not generate or execute invented tools. Simple English requests work without Groq. Ambiguous requests ask for clarification.
+
+Set `naturalLanguageCommands` to `false` in `config.json` to require a mention/reply for public chat requests; slash commands are unaffected. Otherwise explicit recognized requests can trigger a response without mentioning the bot. Ordinary unrelated messages do not trigger AI calls. Both paths stay restricted to configured channels, with bounded tool concurrency and public-request cooldowns.
+
+**Natural-language message replies are public**, including the typing indicator. They cannot be ephemeral. Use slash commands for private results. Public pool/doc results show the first card with a slash-command hint for additional pages. AI tool-selection requests, when used, send the triggering text to Groq; public conversation handling already uses the configured history policy.
+
 ## Clean command layout
 
 - **Help:** one short command menu, with privacy/source details on a second page.
-- **Price:** price and 24h change first; volume and market cap in compact fields. Large totals use `$1.23M` / `$1.23B` notation.
+- **Price:** a fresh exchange quote by default. Optional `mode:market` shows delayed 24h change, volume and market cap using compact totals.
 - **Pools:** one complete pool per card, ranked by liquidity; copyable token contract and clickable source title.
 - **Recent pools:** two entries per page, with short risk labels and chart links.
 - **Project docs:** one matching excerpt per page, capped at 650 characters, with its source and review date. Truncated excerpts end with an ellipsis; use the source for full context.
@@ -96,7 +117,8 @@ No real project was supplied, so `knowledge/projects.json` starts empty. `/ask` 
 
 ## Free services and limits
 
-- **CoinPaprika:** token search and market quotes. No API key configured in this implementation.
+- **Coinbase Exchange:** uncached public USD ticker snapshots for supported exchange products. Latest trade must be no older than 30 seconds.
+- **CoinPaprika:** token search and delayed aggregate market stats via `mode:market`. No API key configured in this implementation.
 - **DEX Screener:** token pools, liquidity, FDV and trading data.
 - **GeckoTerminal:** recent pool feed, not every launch and not a verified-project directory.
 - **Local JSON/Markdown:** project knowledge. Curated local glossary. No database or embedding subscription.
@@ -104,7 +126,7 @@ No real project was supplied, so `knowledge/projects.json` starts empty. `/ask` 
 
 No paid market API subscription is required by this code. Public API policies and availability can change; there is no guarantee of unlimited usage, commercial rights for all uses, real-time prices, or free hosting. Check current provider terms before deployment. Run on your own always-on computer to avoid a hosting subscription.
 
-Market responses are cached for 60 seconds, discovery for 90 seconds, token searches for one hour. A conservative per-provider request scheduler, request coalescing, 12-second HTTP timeouts, 429 cooldowns, a five-second per-user cooldown, and a three-command concurrency limit reduce usage. Limits are **per process**, not distributed. Missing values are shown as N/A, not invented zeros. Market queries go to external providers; slash questions stay in local document search and do not enter public AI history.
+Live exchange quotes bypass the bot cache (`no-store`) and share only concurrent in-flight requests. Other market responses are cached for 60 seconds, discovery for 90 seconds, and token searches for one hour. A conservative per-provider request scheduler, request coalescing, 12-second HTTP timeouts, 429 cooldowns, a five-second per-user cooldown, and a three-command concurrency limit reduce usage. Limits are **per process**, not distributed. Missing values are shown as N/A, not invented zeros. Market queries go to external providers; slash questions stay in local document search and do not enter public AI history.
 
 ## Structure
 
@@ -122,7 +144,9 @@ src/
     private-replies.js        Private embed cards, pagination and expiry
   features/
     knowledge.js              Local curated project search and official links
-    market.js                 Market queries, chain mapping and formatting
+    market.js                 Quote/market queries, chain mapping and formatting
+    live-quotes.js            Fresh exchange quote validation
+    actions.js                Shared read-only tool validation/execution
     glossary.js               Curated educational answers
   integrations/public-api.js  Public HTTP requests, cache and pacing
   utils/                      Discord-sized text splitting

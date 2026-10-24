@@ -11,5 +11,6 @@
   "systemPromptFile": "system-prompt.txt",
   "maxCompletionTokens": 300,
   "maxPendingPerChannel": 10,
-  "requestTimeoutMs": 30000
+  "requestTimeoutMs": 30000,
+  "naturalLanguageCommands": true
 }

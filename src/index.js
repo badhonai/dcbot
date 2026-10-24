@@ -5,6 +5,8 @@ const Groq = require('groq-sdk');
 const { loadConfig } = require('./config');
 const { HistoryStore } = require('./conversation/history-store');
 const { ChannelQueue } = require('./conversation/channel-queue');
+const { Actions } = require('./features/actions');
+const { createIntentRouter } = require('./ai/intent-router');
 const { createAiService } = require('./ai/groq-service');
 const { createHandlers } = require('./discord/handlers');
 const { PublicApi } = require('./integrations/public-api');
@@ -27,11 +29,14 @@ async function main() {
     const commandSync = new GuildCommandSync({ rest: client.rest, commands, logger: log.child('command-sync') });
     const queue = new ChannelQueue(config.maxPendingPerChannel);
     const replies = new PrivateReplies();
-    const onInteraction = createWeb3Handler({ config, replies, logger: log.child('commands'),
-        market: new MarketService(new PublicApi({ logger: log.child('market-api') })), knowledge });
-    const handlers = createHandlers({ client, config, queue, logger: log.child('chat'),
+    const market = new MarketService(new PublicApi({ logger: log.child('market-api') }));
+    const actions = new Actions({ market, knowledge });
+    const groq = config.groqApiKey ? new Groq({ apiKey: config.groqApiKey, timeout: config.requestTimeoutMs, maxRetries: 1 }) : null;
+    const router = createIntentRouter({ client: groq, config, logger: log.child('intent-router') });
+    const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, logger: log.child('commands') });
+    const handlers = createHandlers({ client, config, queue, router, actions, logger: log.child('chat'),
         history: new HistoryStore(config.historyLength),
-        ai: config.groqApiKey ? createAiService(new Groq({ apiKey: config.groqApiKey, timeout: config.requestTimeoutMs, maxRetries: 1 }), config)
+        ai: groq ? createAiService(groq, config)
             : { respond: async () => 'AI chat is not configured. Use /help for private Web3 commands.' } });
     client.once(Events.ClientReady, () => {
         log.info('Connected to Discord', { bot: client.user.tag, guilds: client.guilds.cache.size, slashReplies: 'private' });

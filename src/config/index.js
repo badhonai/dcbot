@@ -11,6 +11,7 @@ function loadConfig(env = process.env) {
         !config.channels.every(id => typeof id === 'string' && /^\d{17,20}$/.test(id))) {
         throw new Error('channels must contain Discord channel ID strings');
     }
+    if (config.naturalLanguageCommands !== undefined && typeof config.naturalLanguageCommands !== 'boolean') throw new Error('naturalLanguageCommands must be true or false');
     if (typeof config.model !== 'string' || !config.model.trim()) throw new Error('model is required');
     const ranges = { historyLength: [1, 200], maxResponseLength: [1, 2000],
         maxCompletionTokens: [1, 32768], maxPendingPerChannel: [1, 100], requestTimeoutMs: [1000, 120000] };

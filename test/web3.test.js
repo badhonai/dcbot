@@ -34,14 +34,14 @@ test('429 failures start a provider cooldown and do not enter cache', async () =
 });
 test('price ID returns deterministic provider values, attribution and timestamps', async () => {
     const service = new MarketService({ get: async () => ({ fetchedAt: '2026-10-24T10:00:00Z', data: { id: 'btc-bitcoin', name: 'Bitcoin', symbol: 'BTC', last_updated: 'then', quotes: { USD: { price: 100, market_cap: 1000 } } } }) });
-    const result = await service.price('btc-bitcoin');
+    const result = await service.price('btc-bitcoin', { mode: 'market' });
     assert.match(textOf(result), /\$100/); assert.match(result.pages[0].url, /coinpaprika/); assert.equal(result.pages[0].timestamp, '2026-10-24T10:00:00.000Z');
 });
 test('ambiguous symbols return IDs instead of guessing a token', async () => {
     const service = new MarketService({ get: async () => ({ data: { currencies: [
         { id: 'foo-one', name: 'One', symbol: 'FOO', is_active: true }, { id: 'foo-two', name: 'Two', symbol: 'FOO', is_active: true },
     ] } }) });
-    assert.match(textOf(await service.price('foo')), /Multiple matches/);
+    assert.match(textOf(await service.price('foo', { mode: 'market' })), /Multiple matches/);
 });
 test('unique symbol resolves to a ticker automatically', async () => {
     const urls = [];
@@ -50,7 +50,7 @@ test('unique symbol resolves to a ticker automatically', async () => {
         return url.includes('/search') ? { data: { currencies: [{ id: 'btc-bitcoin', symbol: 'BTC', is_active: true }] } } :
             { data: { name: 'Bitcoin', quotes: { USD: { price: 1 } } } };
     } });
-    assert.match(textOf(await service.price('BTC')), /Bitcoin/); assert.equal(urls.length, 2);
+    assert.match(textOf(await service.price('BTC', { mode: 'market' })), /Bitcoin/); assert.equal(urls.length, 2);
 });
 test('unknown chains and malformed addresses are rejected before any request', async () => {
     const service = new MarketService({ get: () => { throw new Error('should not fetch'); } });

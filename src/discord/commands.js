@@ -6,7 +6,7 @@ const commands = [
     new SlashCommandBuilder().setName('help').setDescription('Commands & quick examples'),
     text(text(new SlashCommandBuilder().setName('ask').setDescription('Search approved project docs'), 'question', 'What would you like to know?'), 'project', 'Project ID (optional)', false),
     text(new SlashCommandBuilder().setName('official').setDescription('Approved project links'), 'project', 'Project ID (optional)', false),
-    text(new SlashCommandBuilder().setName('price').setDescription('Token price & 24h market data'), 'token', 'Name, symbol or ID, e.g. BTC or btc-bitcoin'),
+    text(new SlashCommandBuilder().setName('price').setDescription('Fresh exchange price or market stats'), 'token', 'Ticker, e.g. BTC, ETH or SOL').addStringOption(o => o.setName('mode').setDescription('Live quote (default) or delayed market stats').addChoices({ name: 'Live exchange quote', value: 'live' }, { name: 'Market stats (may be delayed)', value: 'market' })),
     text(chain(new SlashCommandBuilder().setName('pair').setDescription('Token pools, liquidity & volume')), 'address', 'Token contract or mint address (not a pool)'),
     chain(new SlashCommandBuilder().setName('newpairs').setDescription('Recent pools · unverified')),
     new SlashCommandBuilder().setName('explain').setDescription('Web3 terms, simply explained').addStringOption(o => o.setName('term').setDescription('Choose a term').setRequired(true).addChoices(...['liquidity', 'slippage', 'market cap', 'fdv', 'token unlock', 'gas', 'staking', 'rug pull'].map(value => ({ name: value === 'fdv' ? 'FDV' : value.charAt(0).toUpperCase() + value.slice(1), value })))),

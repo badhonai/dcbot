@@ -1,3 +1,4 @@
+const { LiveQuotes } = require('./live-quotes');
 const { card, pages, notice, safeText: plain, relativeTime } = require('../utils/cards');
 const CHAINS = {
     ethereum: ['ethereum', 'eth'], eth: ['ethereum', 'eth'], solana: ['solana', 'solana'],
@@ -5,7 +6,7 @@ const CHAINS = {
     polygon: ['polygon', 'polygon_pos'], optimism: ['optimism', 'optimism'], avalanche: ['avalanche', 'avax'],
 };
 const money = value => value == null || value === '' || !Number.isFinite(Number(value)) ? 'N/A' :
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 6 }).format(Number(value));
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 8 }).format(Number(value));
 const compactMoney = value => value == null || value === '' || !Number.isFinite(Number(value)) ? 'N/A' :
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(Number(value));
 const percent = value => value == null || value === '' || !Number.isFinite(Number(value)) ? 'N/A' : `${Number(value) > 0 ? '+' : ''}${Number(value).toFixed(2)}%`;
@@ -20,8 +21,20 @@ function addressFor(chain, address) {
     if (!valid.test(address)) throw new Error('Invalid token address for this chain.');
 }
 class MarketService {
-    constructor(api) { this.api = api; }
-    async price(query) {
+    constructor(api, { liveQuotes = new LiveQuotes(api) } = {}) { this.api = api; this.liveQuotes = liveQuotes; }
+    async price(query, { mode = 'live' } = {}) {
+        if (mode === 'live') {
+            try {
+                const quote = await this.liveQuotes.get(query);
+                return { ...pages(card(`${quote.symbol} · USD`, `**${money(quote.price)}**`, {
+                    url: quote.url, footer: `Coinbase Exchange · Trade ${quote.ageSeconds}s ago · Fetched`, timestamp: quote.fetchedAt,
+                })), quote };
+            } catch (error) {
+                if (['LIVE_UNAVAILABLE', 'STALE_QUOTE'].includes(error.code)) return notice('Live quote unavailable', error.message);
+                throw error;
+            }
+        }
+        if (mode !== 'market') throw new Error('Unsupported price mode');
         query = query.trim().toLowerCase();
         if (!/^[a-z0-9 -]{1,100}$/.test(query)) throw new Error('Use a token name, symbol, or CoinPaprika ID.');
         let id = query;

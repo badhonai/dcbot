@@ -127,7 +127,7 @@ test('command failures remain private and never expose raw internals', async t =
     const i = interaction('price'); await handler(i);
     assert.equal(i.events[0][1].flags, MessageFlags.Ephemeral);
     assert.ok(!textOf(i.events[1][1]).includes('secret-token'));
-    assert.equal(i.events[1][1].embeds[0].title, 'Couldn’t complete request');
+    assert.equal(i.events[1][1].embeds[0].title, "Couldn't complete request");
 });
 test('rapid repeat commands get a private cooldown reply', async () => {
     const results = [];

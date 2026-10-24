@@ -1,3 +1,4 @@
+const { replyClean } = require('../utils/clean-output');
 const { createAgentMessageHandler } = require('./agent-handler');
 const { PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { clip } = require('../utils/cards');
@@ -60,7 +61,7 @@ function createHandlers({ client, config, history, queue, ai, router, actions, a
                     typingTimer.unref?.();
                     const intent = autoIntent || (shouldRespond ? followUp : null) || (shouldRespond && router ? await router.resolve(input) : null);
                     if (intent?.clarification) {
-                        await message.reply({ content: intent.clarification, allowedMentions: safeMentions }); return;
+                        await replyClean(message, { content: intent.clarification, allowedMentions: safeMentions }); return;
                     }
                     if (intent && actions) {
                         const result = await actions.execute(intent);
@@ -80,7 +81,7 @@ function createHandlers({ client, config, history, queue, ai, router, actions, a
                                 payload = { content: clip([`**${first.title}**`, first.description, ...(first.fields || []).map(f => `**${f.name}:** ${f.value}`), first.url ? `[Source](${first.url})` : ''].filter(Boolean).join('\n'), 1500) };
                             }
                         }
-                        const sent = await message.reply({ ...payload, allowedMentions: safeMentions });
+                        const sent = await replyClean(message, { ...payload, allowedMentions: safeMentions });
                         rememberAction(message, intent);
                         if (context) history.add(message.channelId, 'assistant', context, sent.id);
                         logger.debug?.('Natural-language tool completed', { command: intent.command });
@@ -88,12 +89,12 @@ function createHandlers({ client, config, history, queue, ai, router, actions, a
                     }
                     const response = await ai.respond(history.get(message.channelId));
                     for (const chunk of splitMessage(response, config.maxResponseLength)) {
-                        const sent = await message.reply({ content: chunk, allowedMentions: safeMentions });
+                        const sent = await replyClean(message, { content: chunk, allowedMentions: safeMentions });
                         history.add(message.channelId, 'assistant', chunk, sent.id);
                     }
                 } catch (error) {
                     logger.error('Response failed', { channelId: message.channelId, ...errorDetails(error) });
-                    await message.reply({ content: error.status === 429 || error.code === 'BOT_BUSY' ? 'Busy right now. Please try again shortly.' : 'I couldn’t fetch that right now. Please try again.', allowedMentions: safeMentions });
+                    await replyClean(message, { content: error.status === 429 || error.code === 'BOT_BUSY' ? 'Busy right now. Please try again shortly.' : 'I couldn’t fetch that right now. Please try again.', allowedMentions: safeMentions });
                 } finally { clearInterval(typingTimer); }
             });
         } catch (error) {

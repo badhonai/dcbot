@@ -59,7 +59,7 @@ Web search uses the documented [Ollama web-search API](https://docs.ollama.com/c
 
 Page reading and arithmetic need no search key. The reader accepts public HTTPS websites only, validates all DNS addresses, pins the connection to an approved address, and revalidates redirects. Private/reserved networks, IP-literal URLs, credentials and nonstandard ports are blocked. Limits: 3 redirects, 512 KiB body, 15-second read budget, 10,000 extracted characters. No JavaScript execution, sign-in, CAPTCHA evasion or paywall bypass. Some sites cannot be read. Page text and snippets are untrusted data, not agent instructions; this is risk reduction, not a guarantee that AI is immune to prompt injection.
 
-The agent has at most 5 model rounds, 6 tool calls and 2 concurrent requests, with a 90-second cancellation signal for model/web operations. Existing market requests have their own HTTP timeouts. Public replies suppress website previews and mentions; verified tool-source links are appended for research. Slash results remain private, paginated and best-effort temporary.
+The agent has at most 5 model rounds, 6 tool calls and 2 concurrent requests, with a 90-second cancellation signal for model/web operations. Existing market requests have their own HTTP timeouts. All Discord reply text passes through a final punctuation cleaner: curly apostrophes become straight, fancy dashes are normalized, double quotes/ellipsis characters are removed, and trailing periods are stripped. Embed URL and ID metadata is untouched. Public replies suppress website previews and mentions; verified tool-source links are appended for research. Slash results remain private, paginated and best-effort temporary.
 
 ## Clean command layout
 

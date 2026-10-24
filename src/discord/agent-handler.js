@@ -1,3 +1,4 @@
+const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
 const { splitMessage } = require('../utils/split-message');
 const { createLogger, errorDetails } = require('../utils/logger');
@@ -36,10 +37,10 @@ function createAgentMessageHandler({ client, config, queue, agent, logger = crea
                     await message.channel.sendTyping();
                     timer = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000); timer.unref?.();
                     const response = await agent.respond(input, { sessionKey, reference });
-                    for (const content of splitMessage(response, Math.min(config.maxResponseLength || 1900, 1900))) await message.reply({ content, flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
+                    for (const content of splitMessage(response, Math.min(config.maxResponseLength || 1900, 1900))) await replyClean(message, { content, flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
                 } catch (error) {
                     logger.error('Agent request failed', errorDetails(error));
-                    await message.reply({ content: 'I couldn’t finish that request right now. Please try again shortly.', flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
+                    await replyClean(message, { content: 'I couldn’t finish that request right now. Please try again shortly.', flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
                 } finally { clearInterval(timer); }
             });
         } catch (error) { logger.warn('Message work unavailable', { name: error.name }); }

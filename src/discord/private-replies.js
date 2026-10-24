@@ -1,3 +1,4 @@
+const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { randomBytes } = require('node:crypto');
 const { splitMessage } = require('../utils/split-message');
@@ -44,7 +45,7 @@ class PrivateReplies {
             interaction.deleteReply().catch(() => {});
         }, this.ttlMs);
         session.timer.unref?.();
-        try { await interaction.editReply(this.payload(id, session)); }
+        try { await interaction.editReply(cleanDiscordPayload(this.payload(id, session))); }
         catch (error) { clearTimeout(session.timer); this.sessions.delete(id); throw error; }
         return id;
     }
@@ -52,7 +53,7 @@ class PrivateReplies {
         const [, id, action] = interaction.customId.split(':');
         const session = this.sessions.get(id);
         if (!session || session.owner !== interaction.user.id) {
-            await interaction.reply({ content: 'This response expired or isn’t yours. Run the command again.', flags: MessageFlags.Ephemeral });
+            await replyClean(interaction, { content: 'This response expired or isn’t yours. Run the command again.', flags: MessageFlags.Ephemeral });
             return;
         }
         if (!['previous', 'next', 'close'].includes(action)) return;
@@ -62,7 +63,7 @@ class PrivateReplies {
             await session.interaction.deleteReply(); return;
         }
         session.page = Math.max(0, Math.min(session.pages.length - 1, session.page + (action === 'next' ? 1 : -1)));
-        await session.interaction.editReply(this.payload(id, session));
+        await session.interaction.editReply(cleanDiscordPayload(this.payload(id, session)));
     }
     destroy() {
         for (const session of this.sessions.values()) clearTimeout(session.timer);

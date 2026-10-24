@@ -1,3 +1,4 @@
+const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
 const { createLogger, errorDetails } = require('../utils/logger');
 const { SPECS } = require('../features/actions');
@@ -76,7 +77,7 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
             const response = notice('Couldn’t complete request', content);
             try {
                 if (interaction.deferred || interaction.replied) await replies.send(interaction, response);
-                else await interaction.reply({ embeds: response.pages, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+                else await replyClean(interaction, { embeds: response.pages, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
             } catch { /* Expired interaction or lost channel access. Never fall back to a public message. */ }
         }
     };

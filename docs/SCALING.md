@@ -25,7 +25,7 @@
 - Use Discord's supported sharding approach as guild traffic requires it. Do not launch identical gateway clients blindly.
 - Route each channel's work to a single owner or use distributed ordered jobs/leases. The existing in-memory queue does not coordinate across processes.
 - Add distributed provider rate limits, idempotency, backpressure, retry budgets with jitter, dead-letter handling, and lease expiry tests.
-- Move command registration into release operations; separate gateway ingestion from AI workers only when measurements justify the additional infrastructure.
+- At distributed scale, move the current automatic per-guild command sync into a single release operation or coordinated owner; its coalescing is process-local. Separate gateway ingestion from AI workers only when measurements justify the additional infrastructure.
 
 **Gate:** no duplicate responses or cross-channel state leakage during worker failures, reconnects, or rolling deploys.
 

@@ -22,15 +22,15 @@ All money formatting handles missing values as N/A. Sources and fetch timestamps
 
 ## Validation
 
-43 offline tests pass on Node 22 (including mobile-format and ready-event regression checks). Tests cover the original public chat modules plus command definitions, provider caching/coalescing, 429 cooldown, token resolution, address validation, discovery warnings, knowledge retrieval and empty configuration, glossary, ephemeral acknowledgement, pagination ownership/navigation/dismissal/expiry, cooldowns, and private error handling. JavaScript syntax checks pass.
+52 offline tests pass on Node 22 (including mobile-format, ready-event and multi-guild command-sync regression checks). Tests cover the original public chat modules plus command definitions, provider caching/coalescing, 429 cooldown, token resolution, address validation, discovery warnings, knowledge retrieval and empty configuration, glossary, ephemeral acknowledgement, pagination ownership/navigation/dismissal/expiry, cooldowns, and private error handling. JavaScript syntax checks pass.
 
 Live public HTTP smoke checks succeeded for CoinPaprika search/ticker, DEX Screener WETH pools, and GeckoTerminal Ethereum new pools from this workspace. These do not guarantee future availability or all-chain coverage. Live Discord command deployment, ephemeral rendering, gateway login, and Groq chat have not been tested without credentials. Staging-guild testing remains necessary.
 
 ## Deployment checklist
 
-1. Use Node 22+, `npm ci`, and configure Discord credentials and channel IDs.
+1. Use Node 22+, `npm ci`, and configure the Discord bot token and channel IDs from each target server.
 2. Populate real approved project documents, or leave empty to explicitly refuse unsupported knowledge questions.
-3. Run `npm test`, then deploy commands to a staging guild.
+3. Run `npm test`, then start in staging; confirm the per-server command-sync result. Startup syncs every joined guild, so use a separate staging application if production registration must remain untouched.
 4. Confirm two accounts cannot see each other's slash results; check long help pagination, Dismiss, ten-minute expiry, and restart behavior.
 5. Test `/price`, ambiguous token symbols, `/pair`, `/newpairs`, provider outages, invalid inputs, and channel restrictions.
 6. Set a currently supported Groq model only if enabling public AI chat.
@@ -43,3 +43,9 @@ Shared `src/utils/logger.js` handles readable/JSON formatting, severity filterin
 ### Mobile console follow-up
 
 Default output is now compact with a 48-character line width, indented details, and short UTC times. `pretty` is an alias for compact; the previous desktop layout is opt-in as `wide`. Long lines wrap deliberately instead of relying on the browser. Optional missing knowledge is no longer a warning. Discord startup uses `Events.ClientReady`; ephemeral replies use `MessageFlags.Ephemeral`. No deprecation warnings are globally suppressed. Docker/npm/hosting-daemon text remains controlled by the hosting panel, not the application logger.
+
+## Multi-server command registration
+
+Startup now syncs guild commands across the gateway guild cache. New `guildCreate` events trigger the same synchronizer. The ready connection log no longer claims that a local command count means registration succeeded. Sync compares normalized current definitions before writing, ignores Discord-added IDs/version/default fields, serializes the startup server list, coalesces concurrent requests per application/server, logs per-server failures and a summary, and drains pending registration during bounded shutdown. Manual deployment supports comma-separated IDs or paginated all-server discovery with only the bot token. This app owns and replaces its guild command set; old global registrations are not modified.
+
+Nine additional offline tests cover multiple guilds, unchanged definitions, changed definitions, isolated permission failures, duplicate events, shutdown, legacy-command removal, pagination and empty server lists. Real Discord registration remains untested here without the bot's Discord token. Installation scopes and Discord-side permissions can still prevent discovery/use; a code change cannot bypass them.

@@ -32,14 +32,29 @@ Use Node.js **22+**.
 ```sh
 npm ci
 cp .env.example .env
-# Fill in Discord token, application ID and target guild ID.
+# Fill in the Discord bot token. Server IDs are not needed for automatic registration.
 # Set your channel IDs in config.json.
 npm test
-npm run deploy:commands
 npm start
 ```
 
-`DISCORD_TOKEN` is needed to run the bot. `DISCORD_APPLICATION_ID` and `DISCORD_GUILD_ID` are needed to deploy commands. Run deployment per target guild, and again after command changes. It **replaces the application's entire guild command set**, including removing the old `/uns`. It does not remove any separately deployed global commands; remove those separately if your installation has them.
+`DISCORD_TOKEN` is enough for startup command registration. After connecting, the bot checks **every joined server**, registers missing/changed commands and skips unchanged command sets. A new-server event also triggers registration. A failure in one server is logged without blocking the others. No application ID or server ID is needed for this automatic mode.
+
+Registration **replaces this application's entire guild command set**, including removing the old `/uns`. It does not modify other bots' commands or separately deployed global commands. Remove any old global commands separately. Changes to server command permissions remain controlled by Discord/server settings.
+
+### Multiple servers and manual deployment
+
+Normal use: install the bot in each server with `bot` and `applications.commands` scopes, update the code, and restart. Look for **Command sync complete**, with server/update/unchanged/failure counts. A connection log alone is not a registration confirmation.
+
+The optional `npm run deploy:commands` script also discovers all joined servers by default. It can run without a live gateway connection. To target a subset manually:
+
+```dotenv
+DISCORD_GUILD_IDS=123456789012345678,234567890123456789
+```
+
+These are **server IDs**, not channel IDs. `DISCORD_GUILD_IDS` takes precedence over the legacy single `DISCORD_GUILD_ID`. `DISCORD_APPLICATION_ID` is optional: the script discovers it from the authenticated bot when omitted. These optional IDs only restrict the manual script, not automatic startup registration.
+
+The shared `config.json` channel allowlist still controls where replies are permitted. Add the relevant channels from **each server**. Commands may appear elsewhere but will respond with a private channel-disabled notice. If they do not appear after a successful sync, refresh Discord and check installation scopes, Use Application Commands permission and Server Settings → Integrations restrictions.
 
 Install using `bot` and `applications.commands` scopes. Grant only View Channel, Send Messages, and Read Message History for the existing public chat behavior. Threads may require Send Messages in Threads. Enable Message Content Intent for public chat in the developer portal. **No Administrator or Manage Messages permission is required.** Commands are restricted to configured channels; list thread IDs explicitly.
 
@@ -87,6 +102,7 @@ src/
   conversation/               In-memory public history and channel queue
   discord/
     commands.js               Seven slash-command definitions
+    command-sync.js           Per-server command synchronization
     handlers.js               Existing public mention/reply handling
     web3-handler.js           Private commands, cooldowns and help
     private-replies.js        Ephemeral pagination, ownership and expiry
@@ -97,7 +113,7 @@ src/
   integrations/public-api.js  Public HTTP requests, cache and pacing
   utils/                      Discord-sized text splitting
 knowledge/                    Owner-reviewed local project content
-scripts/deploy-commands.js    Explicit per-guild registration
+scripts/deploy-commands.js    Optional multi-server registration
 test/                        Offline tests
 docs/                        Review, roadmap, feature implementation notes
 .github/workflows/test.yml   Node 22 CI
@@ -119,11 +135,16 @@ The default is a **mobile-friendly, 48-character-wide format**, without padded c
   Projects: 0
 [09:37:07] INFO  Project docs not added yet
   Setup: knowledge/projects.json
-[09:37:08] INFO  Online and ready
+[09:37:08] INFO  Connected to Discord
   Bot: ExampleBot#0000
   Guilds: 2
-  Commands: 7
   Slash replies: private
+[09:37:09] INFO  [command-sync] Command sync
+    complete
+  Servers: 2
+  Updated: 0
+  Unchanged: 2
+  Failed: 0
 ```
 
 Example only, not live status. Compact timestamps are UTC `HH:mm:ss`; startup includes the UTC date. Component names appear for non-app logs. Long messages and details wrap with indentation at `LOG_WIDTH`, including unbroken strings. Missing optional project docs are informational, not a warning. Connecting messages appear only at debug level. The Discord ready listener uses the supported `clientReady` event, and ephemeral interactions use `MessageFlags.Ephemeral`, avoiding those deprecated API forms without suppressing runtime warnings.

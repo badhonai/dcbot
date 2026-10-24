@@ -13,6 +13,12 @@ function loadConfig(env = process.env) {
     }
     if (config.naturalLanguageCommands !== undefined && typeof config.naturalLanguageCommands !== 'boolean') throw new Error('naturalLanguageCommands must be true or false');
     if (typeof config.model !== 'string' || !config.model.trim()) throw new Error('model is required');
+    const legacyGroq = !config.fallbackModel && config.model.startsWith('qwen/');
+    const model = env.OLLAMA_MODEL?.trim() || (legacyGroq ? 'gpt-oss:120b' : config.model);
+    const fallbackModel = env.GROQ_MODEL?.trim() || config.fallbackModel || (legacyGroq ? config.model : 'qwen/qwen3.8-27b');
+    if (typeof fallbackModel !== 'string' || !fallbackModel.trim()) throw new Error('fallbackModel is required');
+    const primaryMaxTokens = config.primaryMaxTokens ?? 1024;
+    if (!Number.isInteger(primaryMaxTokens) || primaryMaxTokens < 128 || primaryMaxTokens > 8192) throw new Error('primaryMaxTokens must be between 128 and 8192');
     const ranges = { historyLength: [1, 200], maxResponseLength: [1, 2000],
         maxCompletionTokens: [1, 32768], maxPendingPerChannel: [1, 100], requestTimeoutMs: [1000, 120000] };
     for (const [key, [min, max]] of Object.entries(ranges)) {
@@ -27,7 +33,7 @@ function loadConfig(env = process.env) {
     const promptPath = path.resolve(ROOT, config.systemPromptFile);
     const systemPrompt = fs.readFileSync(fs.existsSync(promptPath) ? promptPath : path.join(ROOT, 'system-prompt.example.txt'), 'utf8').trim();
     if (!systemPrompt) throw new Error('System prompt must not be empty');
-    return Object.freeze({ ...config, channels: Object.freeze([...config.channels]), systemPrompt,
-        discordToken: env.DISCORD_TOKEN, groqApiKey: env.GROQ_API_KEY });
+    return Object.freeze({ ...config, model, fallbackModel, primaryMaxTokens, channels: Object.freeze([...config.channels]), systemPrompt,
+        discordToken: env.DISCORD_TOKEN, groqApiKey: env.GROQ_API_KEY?.trim() || undefined, ollamaApiKey: env.OLLAMA_API_KEY?.trim() || undefined });
 }
 module.exports = { loadConfig, ROOT };

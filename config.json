@@ -5,7 +5,7 @@
     "1536762480167227517",
     "1522845015305486406"
   ],
-  "model": "qwen/qwen3.8-27b",
+  "model": "gpt-oss:120b",
   "historyLength": 13,
   "maxResponseLength": 1600,
   "temperature": 0.7,
@@ -13,5 +13,7 @@
   "maxCompletionTokens": 300,
   "maxPendingPerChannel": 10,
   "requestTimeoutMs": 30000,
-  "naturalLanguageCommands": true
+  "naturalLanguageCommands": true,
+  "fallbackModel": "qwen/qwen3.8-27b",
+  "primaryMaxTokens": 1024
 }

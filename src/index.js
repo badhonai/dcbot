@@ -1,7 +1,7 @@
 const path = require('node:path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { Client, GatewayIntentBits, Events } = require('discord.js');
-const Groq = require('groq-sdk');
+const { createModelClient } = require('./ai/provider-client');
 const { loadConfig } = require('./config');
 const { HistoryStore } = require('./conversation/history-store');
 const { ChannelQueue } = require('./conversation/channel-queue');
@@ -23,7 +23,7 @@ async function main() {
     log.info('Starting Web3 assistant', { date: new Date().toISOString().slice(0, 10) + ' UTC', node: process.version });
     const config = loadConfig();
     const knowledge = new KnowledgeService(path.resolve(__dirname, '../knowledge'));
-    log.info('Settings ready', { channels: config.channels.length, aiChat: config.groqApiKey ? 'enabled' : 'disabled', projects: knowledge.projects.length });
+    log.info('Settings ready', { channels: config.channels.length, aiChat: config.ollamaApiKey || config.groqApiKey ? 'enabled' : 'disabled', projects: knowledge.projects.length });
     if (!knowledge.projects.length) log.info('Project docs not added yet', { setup: 'knowledge/projects.json' });
     const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
     const commandSync = new GuildCommandSync({ rest: client.rest, commands, logger: log.child('command-sync') });
@@ -31,12 +31,12 @@ async function main() {
     const replies = new PrivateReplies();
     const market = new MarketService(new PublicApi({ logger: log.child('market-api') }));
     const actions = new Actions({ market, knowledge });
-    const groq = config.groqApiKey ? new Groq({ apiKey: config.groqApiKey, timeout: config.requestTimeoutMs, maxRetries: 1 }) : null;
-    const router = createIntentRouter({ client: groq, config, logger: log.child('intent-router') });
+    const modelClient = createModelClient(config, { logger: log.child('ai') });
+    const router = createIntentRouter({ client: modelClient, config, logger: log.child('intent-router') });
     const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, logger: log.child('commands') });
     const handlers = createHandlers({ client, config, queue, router, actions, logger: log.child('chat'),
         history: new HistoryStore(config.historyLength),
-        ai: groq ? createAiService(groq, config)
+        ai: modelClient ? createAiService(modelClient, config)
             : { respond: async () => 'AI chat is not configured. Use /help for private Web3 commands.' } });
     client.once(Events.ClientReady, () => {
         log.info('Connected to Discord', { bot: client.user.tag, guilds: client.guilds.cache.size, slashReplies: 'private' });

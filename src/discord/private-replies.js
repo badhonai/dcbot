@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { randomBytes } = require('node:crypto');
 const { splitMessage } = require('../utils/split-message');
 const safeMentions = { parse: [], repliedUser: false };
@@ -40,7 +40,7 @@ class PrivateReplies {
         const [, id, action] = interaction.customId.split(':');
         const session = this.sessions.get(id);
         if (!session || session.owner !== interaction.user.id) {
-            await interaction.reply({ content: 'This private response expired or belongs to another user. Run the command again.', ephemeral: true });
+            await interaction.reply({ content: 'This private response expired or belongs to another user. Run the command again.', flags: MessageFlags.Ephemeral });
             return;
         }
         if (!['previous', 'next', 'close'].includes(action)) return;

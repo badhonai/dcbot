@@ -1,6 +1,6 @@
 const path = require('node:path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Events } = require('discord.js');
 const Groq = require('groq-sdk');
 const { loadConfig } = require('./config');
 const { HistoryStore } = require('./conversation/history-store');
@@ -16,11 +16,11 @@ const { createLogger, errorDetails } = require('./utils/logger');
 const log = createLogger('app');
 
 async function main() {
-    log.info('Starting Web3 assistant', { node: process.version });
+    log.info('Starting Web3 assistant', { date: new Date().toISOString().slice(0, 10) + ' UTC', node: process.version });
     const config = loadConfig();
     const knowledge = new KnowledgeService(path.resolve(__dirname, '../knowledge'));
-    log.info('Configuration loaded', { channels: config.channels.length, aiChat: config.groqApiKey ? 'enabled' : 'disabled', projects: knowledge.projects.length });
-    if (!knowledge.projects.length) log.warn('Project knowledge not configured', { hint: 'Add reviewed documents to knowledge/projects.json to enable /ask and /official' });
+    log.info('Settings ready', { channels: config.channels.length, aiChat: config.groqApiKey ? 'enabled' : 'disabled', projects: knowledge.projects.length });
+    if (!knowledge.projects.length) log.info('Project docs not added yet', { setup: 'knowledge/projects.json' });
     const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
     const queue = new ChannelQueue(config.maxPendingPerChannel);
     const replies = new PrivateReplies();
@@ -30,7 +30,7 @@ async function main() {
         history: new HistoryStore(config.historyLength),
         ai: config.groqApiKey ? createAiService(new Groq({ apiKey: config.groqApiKey, timeout: config.requestTimeoutMs, maxRetries: 1 }), config)
             : { respond: async () => 'AI chat is not configured. Use /help for private Web3 commands.' } });
-    client.once('ready', () => log.info('Bot online', { bot: client.user.tag, guilds: client.guilds.cache.size, commands: 7, slashReplies: 'private' }));
+    client.once(Events.ClientReady, () => log.info('Online and ready', { bot: client.user.tag, guilds: client.guilds.cache.size, commands: 7, slashReplies: 'private' }));
     client.on('messageCreate', handlers.onMessage);
     client.on('interactionCreate', onInteraction);
     client.on('error', error => log.error('Discord client error', errorDetails(error)));
@@ -57,7 +57,7 @@ async function main() {
     }
     process.once('SIGTERM', () => shutdown('SIGTERM'));
     process.once('SIGINT', () => shutdown('SIGINT'));
-    log.info('Connecting to Discord');
+    log.debug('Connecting to Discord');
     try { await client.login(config.discordToken); }
     catch (error) { replies.destroy(); client.destroy(); throw error; }
 }

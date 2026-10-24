@@ -22,7 +22,7 @@ All money formatting handles missing values as N/A. Sources and fetch timestamps
 
 ## Validation
 
-38 offline tests pass on Node 22 (including nine shared-logger tests). Tests cover the original public chat modules plus command definitions, provider caching/coalescing, 429 cooldown, token resolution, address validation, discovery warnings, knowledge retrieval and empty configuration, glossary, ephemeral acknowledgement, pagination ownership/navigation/dismissal/expiry, cooldowns, and private error handling. JavaScript syntax checks pass.
+43 offline tests pass on Node 22 (including mobile-format and ready-event regression checks). Tests cover the original public chat modules plus command definitions, provider caching/coalescing, 429 cooldown, token resolution, address validation, discovery warnings, knowledge retrieval and empty configuration, glossary, ephemeral acknowledgement, pagination ownership/navigation/dismissal/expiry, cooldowns, and private error handling. JavaScript syntax checks pass.
 
 Live public HTTP smoke checks succeeded for CoinPaprika search/ticker, DEX Screener WETH pools, and GeckoTerminal Ethereum new pools from this workspace. These do not guarantee future availability or all-chain coverage. Live Discord command deployment, ephemeral rendering, gateway login, and Groq chat have not been tested without credentials. Staging-guild testing remains necessary.
 
@@ -39,3 +39,7 @@ Live public HTTP smoke checks succeeded for CoinPaprika search/ticker, DEX Scree
 ## Console logging update
 
 Shared `src/utils/logger.js` handles readable/JSON formatting, severity filtering, UTC timestamps, field bounds, control-character removal and credential redaction. All application `console.*` calls have been replaced. Bot startup, readiness, reconnect/resume, deployment and shutdown now use consistent component-scoped records. Normal command completions and cache hits are debug-only; expected input/setup failures do not generate error-level noise. Provider errors retain safe status metadata without raw responses. Logging tests cover formatting, severity/child inheritance, JSON integrity, redaction, injection resistance, bounds, silence/fallback levels, safe error metadata and severity routing.
+
+### Mobile console follow-up
+
+Default output is now compact with a 48-character line width, indented details, and short UTC times. `pretty` is an alias for compact; the previous desktop layout is opt-in as `wide`. Long lines wrap deliberately instead of relying on the browser. Optional missing knowledge is no longer a warning. Discord startup uses `Events.ClientReady`; ephemeral replies use `MessageFlags.Ephemeral`. No deprecation warnings are globally suppressed. Docker/npm/hosting-daemon text remains controlled by the hosting panel, not the application logger.

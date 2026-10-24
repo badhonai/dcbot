@@ -3,7 +3,9 @@ const SECRET_KEY = /token|secret|password|authorization|api.?key|cookie|private.
 function createLogger(scope = 'app', options = {}) {
     const env = options.env || process.env;
     const level = options.level || env.LOG_LEVEL || 'info';
-    const format = options.format || env.LOG_FORMAT || 'pretty';
+    const format = options.format || env.LOG_FORMAT || 'compact';
+    const requestedWidth = Number(options.width ?? env.LOG_WIDTH ?? 48);
+    const width = Number.isInteger(requestedWidth) && requestedWidth >= 32 && requestedWidth <= 120 ? requestedWidth : 48;
     const threshold = LEVELS[level] ?? LEVELS.info;
     const secrets = options.secrets || Object.entries(env).filter(([key, value]) => SECRET_KEY.test(key) && value?.length >= 8).map(([, value]) => value);
     const clean = value => {
@@ -25,9 +27,31 @@ function createLogger(scope = 'app', options = {}) {
         const time = now().toISOString();
         if (format === 'json') {
             output(JSON.stringify({ time, level: severity, scope: clean(scope), message: clean(message), fields: data }), severity);
-        } else {
+        } else if (format === 'wide') {
             const details = Object.entries(data).map(([key, value]) => `${key}=${typeof value === 'string' && /\s|=/.test(value) ? JSON.stringify(value) : value}`).join('  ');
             output(`${time}  ${severity.toUpperCase().padEnd(5)}  ${clean(scope).slice(0, 14).padEnd(14)}  ${clean(message)}${details ? '  |  ' + details : ''}`, severity);
+        } else {
+            // Compact (also the legacy 'pretty' alias): no padded columns or long inline metadata.
+            const wrap = (text, indent = '') => {
+                const lines = [];
+                while (text.length > width - indent.length) {
+                    const available = width - indent.length;
+                    let end = text.lastIndexOf(' ', available);
+                    if (end <= 0) end = available;
+                    lines.push(indent + text.slice(0, end));
+                    text = text.slice(end).trimStart();
+                    indent = '    ';
+                }
+                if (text) lines.push(indent + text);
+                return lines;
+            };
+            const component = scope === 'app' ? '' : `[${clean(scope).slice(0, 14)}] `;
+            const lines = wrap(`[${time.slice(11, 19)}] ${severity.toUpperCase().padEnd(5)} ${component}${clean(message)}`);
+            for (const [key, value] of Object.entries(data)) {
+                const label = ({ aiChat: 'AI chat', node: 'Node.js', slashReplies: 'Slash replies', durationMs: 'Duration (ms)', timeoutMs: 'Timeout (ms)' })[key] || key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+                lines.push(...wrap(`${label.charAt(0).toUpperCase() + label.slice(1)}: ${value}`, '  '));
+            }
+            output(lines.join('\n'), severity);
         }
     }
     return {

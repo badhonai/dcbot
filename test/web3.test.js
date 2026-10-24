@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -99,7 +100,7 @@ test('private results paginate below Discord size limit and enforce owner', asyn
     assert.ok(i.events[0][1].content.length < 2000);
     let denied;
     await replies.onButton({ customId: `private:${id}:next`, user: { id: 'other' }, reply: async p => { denied = p; } });
-    assert.equal(denied.ephemeral, true); assert.equal(replies.sessions.get(id).page, 0);
+    assert.equal(denied.flags, MessageFlags.Ephemeral); assert.equal(replies.sessions.get(id).page, 0);
     await replies.onButton({ customId: `private:${id}:next`, user: i.user, deferUpdate: async () => {} });
     assert.equal(replies.sessions.get(id).page, 1);
     await replies.onButton({ customId: `private:${id}:close`, user: i.user, deferUpdate: async () => {} });
@@ -115,13 +116,13 @@ test('help is deferred privately before result, with no public sends', async t =
     const replies = new PrivateReplies(); t.after(() => replies.destroy());
     const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies, market: {}, knowledge: {} });
     const i = interaction(); await handler(i);
-    assert.equal(i.events[0][0], 'defer'); assert.equal(i.events[0][1].ephemeral, true);
+    assert.equal(i.events[0][0], 'defer'); assert.equal(i.events[0][1].flags, MessageFlags.Ephemeral);
     assert.match(i.events[1][1].content, /Web3 assistant/);
 });
 test('command failures remain private and never expose raw internals', async () => {
     const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies: {}, market: { price: async () => { throw new Error('secret-token'); } }, knowledge: {}, logger: { error() {} } });
     const i = interaction('price'); await handler(i);
-    assert.equal(i.events[0][1].ephemeral, true);
+    assert.equal(i.events[0][1].flags, MessageFlags.Ephemeral);
     assert.ok(!i.events[1][1].content.includes('secret-token'));
 });
 test('rapid repeat commands get a private cooldown reply', async () => {

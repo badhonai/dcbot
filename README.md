@@ -107,28 +107,44 @@ Run `npm test` for offline tests. See [implementation details](docs/WEB3.md) and
 
 ## Clean console logs
 
-All application and command-deployment logs use a shared, dependency-free logger:
+The default is a **mobile-friendly, 48-character-wide format**, without padded component columns or long inline metadata:
 
 ```text
-2026-10-24T10:00:00.000Z  INFO   app             Starting Web3 assistant  |  node=v22.23.0
-2026-10-24T10:00:00.010Z  INFO   app             Configuration loaded  |  channels=3  aiChat=disabled  projects=1
-2026-10-24T10:00:00.020Z  INFO   app             Connecting to Discord
-2026-10-24T10:00:01.000Z  INFO   app             Bot online  |  bot=ExampleBot  guilds=1  commands=7  slashReplies=private
+[09:37:07] INFO  Starting Web3 assistant
+  Date: 2026-10-24 UTC
+  Node.js: v24.22.1
+[09:37:07] INFO  Settings ready
+  Channels: 3
+  AI chat: enabled
+  Projects: 0
+[09:37:07] INFO  Project docs not added yet
+  Setup: knowledge/projects.json
+[09:37:08] INFO  Online and ready
+  Bot: ExampleBot#0000
+  Guilds: 2
+  Commands: 7
+  Slash replies: private
 ```
 
-Examples are illustrative, not live status. Timestamps are UTC ISO 8601. Levels and component columns are aligned. Warnings/errors go to stderr; other levels go to stdout. Hosting platforms may merge these streams in a slightly different order.
+Example only, not live status. Compact timestamps are UTC `HH:mm:ss`; startup includes the UTC date. Component names appear for non-app logs. Long messages and details wrap with indentation at `LOG_WIDTH`, including unbroken strings. Missing optional project docs are informational, not a warning. Connecting messages appear only at debug level. The Discord ready listener uses the supported `clientReady` event, and ephemeral interactions use `MessageFlags.Ephemeral`, avoiding those deprecated API forms without suppressing runtime warnings.
 
 Configure `.env`:
 
 ```dotenv
 LOG_LEVEL=info
-LOG_FORMAT=pretty
+LOG_FORMAT=compact
+LOG_WIDTH=48
 ```
 
-- `info` (default): startup, readiness, reconnect/resume, shutdown, warnings and errors. No per-message chatter.
-- `debug`: also show command completion times, provider responses and cache hits. No command arguments or message contents.
+- `compact` (default): narrow console format. The old `pretty` setting is an alias, so existing installations also receive the mobile-friendly layout.
+- `wide`: the previous full ISO timestamp and aligned desktop format.
+- `json`: one structured record per line with full ISO timestamps and typed metadata under `fields`, for log collectors; no wrapping.
+- `LOG_WIDTH`: compact line width from 32 to 120 characters; default 48. Choose a smaller width if your host's font still causes wrapping. Character counts are not exact pixel/display-cell measurements for every Unicode glyph.
+- `LOG_LEVEL=info` (default): startup, readiness, reconnect/resume, shutdown, warnings and errors. No per-message chatter.
+- `debug`: also command completion times, provider responses and cache hits. No command arguments or message contents.
 - `warn`, `error`, or `silent`: progressively less output. Invalid levels fall back to `info`.
-- `LOG_FORMAT=json`: one structured record per line, with typed metadata under `fields`, for log collectors. Other formats use readable text.
+
+Warnings/errors go to stderr; other levels go to stdout. Hosting platforms may merge these streams in a slightly different order.
 
 Errors show safe type/status/code metadata and actionable hints, not raw SDK payloads or stack traces. Sensitive metadata fields and configured credential values are redacted; nested objects are omitted and control characters stripped. **Do not deliberately pass secrets or user text to the logger**: redaction is defense in depth, not a guarantee of detecting every possible secret. Debug mode does not disable redaction.
 

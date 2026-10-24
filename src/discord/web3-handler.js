@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const { createLogger, errorDetails } = require('../utils/logger');
 const { explain } = require('../features/glossary');
 const HELP = `**Web3 assistant — help**
@@ -34,10 +35,10 @@ function createWeb3Handler({ config, market, knowledge, replies, logger = create
             if (!interaction.isChatInputCommand()) return;
             if (!['help','ask','official','price','pair','newpairs','explain'].includes(interaction.commandName)) return;
             if (!config.channels.includes(interaction.channelId)) {
-                await interaction.reply({ content: 'Commands are enabled only in configured bot channels.', ephemeral: true }); return;
+                await interaction.reply({ content: 'Commands are enabled only in configured bot channels.', flags: MessageFlags.Ephemeral }); return;
             }
             // Acknowledge privately BEFORE external work. Every result/error stays on this interaction.
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             const now = Date.now(); const user = interaction.user.id;
             if ((cooldowns.get(user) || 0) > now || active >= 3) {
                 await replies.send(interaction, 'Bot busy or command cooldown active. Please try again in a few seconds.'); return;
@@ -72,7 +73,7 @@ function createWeb3Handler({ config, market, knowledge, replies, logger = create
             const content = safe ? error.message : 'Could not complete that request. The data service may be unavailable; please try again later.';
             try {
                 if (interaction.deferred || interaction.replied) await interaction.editReply({ content, components: [], allowedMentions: { parse: [] } });
-                else await interaction.reply({ content, ephemeral: true, allowedMentions: { parse: [] } });
+                else await interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
             } catch { /* Expired interaction or lost channel access. Never fall back to a public message. */ }
         }
     };

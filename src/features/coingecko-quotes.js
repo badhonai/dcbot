@@ -1,8 +1,20 @@
 const IDS = { btc: 'bitcoin', eth: 'ethereum', sol: 'solana', sui: 'sui', apt: 'aptos', bnb: 'binancecoin', xrp: 'ripple', ada: 'cardano', doge: 'dogecoin', avax: 'avalanche-2', link: 'chainlink', dot: 'polkadot', ltc: 'litecoin', ton: 'the-open-network', usdt: 'tether', usdc: 'usd-coin' };
+function coinInput(query, currency) {
+    let input = String(query).trim().replace(/^\$/, '').toLowerCase();
+    const hyphen = input.match(/^([a-z0-9]{1,15})-(usd|usdt)$/);
+    const pair = input.match(/^([a-z0-9-]{1,100})\/(usd|usdt)$/) || (hyphen && Object.hasOwn(IDS, hyphen[1]) ? hyphen : null);
+    const compact = !pair && input.match(/^([a-z0-9]+?)(usdt|usd)$/);
+    const parsed = pair || (compact && (Object.hasOwn(IDS, compact[1]) || Object.values(IDS).includes(compact[1])) ? compact : null);
+    if (parsed) {
+        if (currency && parsed[2] !== currency) throw Object.assign(new Error('Pair currency does not match the requested quote. Use the base token and explicit currency.'), { code: 'LIVE_UNAVAILABLE' });
+        input = parsed[1];
+    }
+    return input;
+}
 class CoinGeckoQuotes {
     constructor(api, { now = Date.now, maxAgeMs = 120000 } = {}) { this.api = api; this.now = now; this.maxAgeMs = maxAgeMs; }
     async resolve(query) {
-        const input = query.trim().toLowerCase();
+        const input = coinInput(query);
         if (!/^[a-z0-9-]{1,100}$/.test(input)) throw Object.assign(new Error('Use a CoinGecko ID or common ticker.'), { code: 'LIVE_UNAVAILABLE' });
         let id = Object.hasOwn(IDS, input) ? IDS[input] : input;
         let symbol = Object.keys(IDS).find(key => IDS[key] === id)?.toUpperCase();
@@ -18,7 +30,7 @@ class CoinGeckoQuotes {
     }
     async get(query, { currency = 'usdt' } = {}) {
         if (!['usd', 'usdt'].includes(currency)) throw new Error('Unsupported quote currency');
-        const { id, symbol } = await this.resolve(query);
+        const { id, symbol } = await this.resolve(coinInput(query, currency));
         const ids = currency === 'usdt' ? [...new Set([id, 'tether'])].join(',') : id;
         const { data, fetchedAt } = await this.api.get(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=usd&include_last_updated_at=true`, 0);
         const validate = entry => {
@@ -33,4 +45,4 @@ class CoinGeckoQuotes {
         return { symbol, coinId: id, price, currency: currency.toUpperCase(), updatedAt: new Date(updated * 1000).toISOString(), fetchedAt, ageSeconds: Math.max(0, Math.floor((this.now() - updated * 1000) / 1000)), source: 'CoinGecko', sourceLabel: quote ? 'CoinGecko cross-rate' : 'CoinGecko', kind: 'aggregate', derived: Boolean(quote), methodology: quote ? 'TOKEN/USD divided by USDT/USD, not an exchange pair trade' : 'Aggregated USD quote', updateIntervalSeconds: 60, url: `https://www.coingecko.com/en/coins/${id}` };
     }
 }
-module.exports = { CoinGeckoQuotes, IDS };
+module.exports = { CoinGeckoQuotes, IDS, coinInput };

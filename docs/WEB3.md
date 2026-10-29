@@ -143,3 +143,7 @@ Respectful tumi/apni phrasing with occasional safe banter; links only on explici
 ## Compact-view patch 1.1.2
 
 Initial results are limited to 399 characters, with owner-checked More/Less and expanded pagination. Display toggles reuse saved data without AI/API calls; public output edits a single message. Relevant masked source labels are on by default, with explicit per-request opt-out, superseding 1.1.1's link suppression default. Eligible public-fact inability/model errors and public /read errors have one bounded web fallback; private-network/credential/safety/consent and live-price restrictions remain. 326 offline Node 22 tests pass; live rollout still requires restart/acceptance checks. See README's 1.1.2 section for caveats.
+
+## AI-price integration diagnostics 1.1.3
+
+Added safe common pair-argument normalization and currency consistency checking, more specific market failure metadata, observed-action integration diagnostics with sanitized selection fields, startup AI-price reason logging and V8 heap-limit visibility. 334 offline tests pass on Node 22 and Node 24.22.1. The previous host's exact failure cause was not observable from its generic `price_tool_failed` snapshot; these diagnostics are intended to expose it if it recurs, not manufacture a passing probe. See README for confirmed observations and limits.

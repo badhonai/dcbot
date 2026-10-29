@@ -13,6 +13,8 @@ function failure(error) {
     else if (status === 401 || providerCode === 10002 || providerCode === 10003) reason = 'missing_or_invalid_key';
     else if (status === 403) reason = 'access_denied_or_host_ip_blocked';
     else if (status === 429 || error?.code === 'PROVIDER_COOLDOWN') reason = 'rate_limited';
+    else if (error?.code === 'LIVE_UNAVAILABLE') reason = 'token_not_resolved';
+    else if (error?.code === 'BOT_BUSY') reason = 'bot_busy';
     else if (error?.code === 'STALE_QUOTE') reason = 'stale_or_invalid_price_timestamp';
     else if (['AbortError', 'TimeoutError'].includes(error?.name)) reason = 'timeout';
     else if (error?.name === 'SyntaxError') reason = 'invalid_provider_json';
@@ -37,16 +39,29 @@ async function checkAi(client, { now = Date.now } = {}) {
 async function checkAgentPrice(client, actions, config, { now = Date.now } = {}) {
     const checkedAt = new Date(now()).toISOString();
     if (!client) return { status: 'not_configured', checkedAt };
-    let attempted = false; let quote;
+    let attempted = false; let quote; let toolFailure; let selection;
+    const observed = { execute: async (intent, options) => {
+        if (intent.command !== 'price') return actions.execute(intent, options);
+        attempted = true;
+        const a = intent.args;
+        selection = { mode: ['live', 'coingecko', 'exchange', 'market'].includes(a.mode) ? a.mode : 'live', currency: ['usd', 'usdt'].includes(a.currency) ? a.currency : 'usdt', tokenShape: /[\/]/.test(a.token) || /(?:USDT|USD)$/i.test(a.token) ? 'pair_or_quote_suffix' : 'ticker_or_id' };
+        try {
+            const output = await actions.execute(intent, options);
+            quote = output?.quote;
+            if (!quote) toolFailure = { reason: ['stale_or_invalid_price_timestamp', 'token_not_resolved'].includes(output?.failureReason) ? output.failureReason : a.mode === 'market' ? 'non_quote_mode_selected' : 'price_tool_returned_no_quote' };
+            else toolFailure = undefined;
+            return output;
+        } catch (error) { const detail = failure(error); toolFailure = { reason: detail.reason, httpStatus: detail.httpStatus, providerCode: detail.providerCode }; throw error; }
+    } };
     try {
         const { createAgent } = require('../ai/agent');
-        const agent = createAgent({ client, actions, config, now, logger: { debug() {} } });
-        const answer = await agent.respond('Bhai, BTC er price koto? USDT e bolo.', { sessionKey: 'diagnostic-price', signal: AbortSignal.timeout(25000), onTool: (intent, output) => { if (intent.command === 'price') { attempted = true; quote = output?.quote; } } });
+        const agent = createAgent({ client, actions: observed, config, now, logger: { debug() {} } });
+        const answer = await agent.respond('Bhai, BTC er price koto? USDT e bolo.', { sessionKey: 'diagnostic-price', signal: AbortSignal.timeout(25000) });
         if (!attempted) return { status: 'error', reason: 'agent_did_not_call_price', checkedAt };
-        if (!quote) return { status: 'error', reason: 'price_tool_failed', toolUsed: true, checkedAt };
+        if (!quote) return { status: 'error', ...(toolFailure || { reason: 'price_tool_returned_no_quote' }), toolUsed: true, selection, checkedAt };
         if (quote.currency !== 'USDT' || !answer.includes('BTC/USDT')) return { status: 'error', reason: 'wrong_quote_currency_or_answer', toolUsed: true, checkedAt };
         if (!/second age update/.test(answer)) return { status: 'error', reason: 'language_mismatch', toolUsed: true, checkedAt };
         return { status: 'ok', toolUsed: true, currency: 'USDT', language: 'banglish', languageMatched: true, checkedAt };
-    } catch (error) { return { ...failure(error), toolUsed: attempted, checkedAt }; }
+    } catch (error) { return { ...failure(error), ...(toolFailure || {}), toolUsed: attempted, ...(selection ? { selection } : {}), checkedAt }; }
 }
 module.exports = { readDemoKey, failure, checkPrice, checkAi, checkAgentPrice };

@@ -32,7 +32,7 @@ class MarketService {
                     url: quote.url, footer: `${quote.sourceLabel || quote.source} · ${quote.kind === 'aggregate' ? 'Updated' : 'Trade'} ${quote.ageSeconds}s ago${quote.kind === 'aggregate' ? ' · Free API ~60s updates' : ''} · Fetched`, timestamp: quote.fetchedAt,
                 })), quote };
             } catch (error) {
-                if (['LIVE_UNAVAILABLE', 'STALE_QUOTE'].includes(error.code)) return { ...notice('Live quote unavailable', error.message), liveUnavailable: true };
+                if (['LIVE_UNAVAILABLE', 'STALE_QUOTE'].includes(error.code)) return { ...notice('Live quote unavailable', error.message), liveUnavailable: true, failureReason: error.code === 'STALE_QUOTE' ? 'stale_or_invalid_price_timestamp' : 'token_not_resolved' };
                 throw error;
             }
         }

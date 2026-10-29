@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test",
+    "diagnose": "node scripts/diagnose.js",
     "deploy:commands": "node scripts/deploy-commands.js"
   },
   "dependencies": {

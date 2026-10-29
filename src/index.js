@@ -18,6 +18,8 @@ const { PrivateReplies } = require('./discord/private-replies');
 const { createWeb3Handler } = require('./discord/web3-handler');
 const { commands } = require('./discord/commands');
 const { GuildCommandSync } = require('./discord/command-sync');
+const { readDemoKey, checkPrice, checkAi } = require('./diagnostics/checks');
+const { healthPort, createHealthServer } = require('./diagnostics/health-server');
 const { createLogger, errorDetails } = require('./utils/logger');
 const log = createLogger('app');
 
@@ -33,11 +35,18 @@ async function main() {
     const preferences = new ReplyPreferences(path.resolve(__dirname, '../data/reply-preferences.json'));
     const boundaries = new ChatBoundaries(path.resolve(__dirname, '../data/chat-boundaries.json'));
     const replies = new PrivateReplies({ preferences });
-    const market = new MarketService(new PublicApi({ logger: log.child('market-api'), coingeckoApiKey: process.env.COINGECKO_DEMO_API_KEY }));
+    const demoKey = readDemoKey();
+    const publicApi = new PublicApi({ logger: log.child('market-api'), coingeckoApiKey: demoKey });
+    const market = new MarketService(publicApi);
     const web = new WebService({ apiKey: config.ollamaApiKey });
     const actions = new Actions({ market, knowledge, web });
     const controls = new PublicControls({ preferences, actions, boundaries, logger: log.child('controls') });
     const modelClient = createModelClient(config, { logger: log.child('ai') });
+    const health = createHealthServer({ checkPrice: () => checkPrice(publicApi, { key: demoKey }), checkAi: () => checkAi(modelClient), discordReady: () => client.isReady(), logger: log.child('health') });
+    if (process.env.HEALTH_ENABLED !== 'false') {
+        const address = await health.start({ port: healthPort(), intervalMinutes: Number(process.env.HEALTH_PROBE_INTERVAL_MINUTES || 0), testAi: process.env.HEALTH_CHECK_AI !== 'false' });
+        log.info('Health endpoint ready', { port: address.port, coinGeckoAuth: demoKey ? 'demo-key' : 'keyless', hint: 'GET /diagnostics · No API keys or chat content exposed' });
+    }
     const agent = createAgent({ client: modelClient, actions, config, logger: log.child('agent') });
     const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, agent, preferences, controls, boundaries, logger: log.child('commands') });
     const handlers = createHandlers({ client, config, queue, agent, preferences, controls, boundaries, logger: log.child('chat') });
@@ -71,7 +80,7 @@ async function main() {
         }, 15000);
         deadline.unref();
         try {
-            await Promise.all([queue.drain(), commandSync.stop()]); replies.destroy(); client.destroy();
+            await Promise.all([queue.drain(), commandSync.stop(), health.stop()]); replies.destroy(); client.destroy();
             log.info('Shutdown complete');
         } catch (error) {
             log.error('Shutdown failed', errorDetails(error)); process.exitCode = 1;
@@ -81,7 +90,7 @@ async function main() {
     process.once('SIGINT', () => shutdown('SIGINT'));
     log.debug('Connecting to Discord');
     try { await client.login(config.discordToken); }
-    catch (error) { replies.destroy(); client.destroy(); throw error; }
+    catch (error) { await health.stop(); replies.destroy(); client.destroy(); throw error; }
 }
 main().catch(error => {
     log.error('Startup failed', errorDetails(error));

@@ -284,3 +284,20 @@ These settings govern application logs, not npm installation output, Node runtim
 ## Remaining operational boundaries
 
 Deploy **one process** today. User opt-out preferences persist on local disk; agent conversations and private page sessions are volatile; restart clears them. Only triggered requests enter agent memory, scoped by user/channel; there is no broad channel-history ingestion in production. Inform members that questions, quoted replies, recent scoped context and tool results may reach both AI providers. No attachment ingestion, message edit/delete synchronization, durable memory, distributed quota coordination, financial advice or token-safety guarantees.
+
+## Hosted diagnostics (Demo plan)
+
+The confirmed integration uses `https://api.coingecko.com/api/v3` and the `x-cg-demo-api-key` header. Store the key privately in `COINGECKO_DEMO_API_KEY`. Existing `CG_API_KEY` or `COINGECKO_API_KEY` variables are also accepted (explicit Demo name wins); surrounding whitespace is trimmed. A `CG-` prefix does not distinguish Demo/Pro, and no Pro endpoint is silently selected.
+
+An optional read-only HTTP service listens on `0.0.0.0` using `HEALTH_PORT`, then `PORT`, then `SERVER_PORT`, defaulting to **25031**. Use your host's allocated port; set `HEALTH_PORT=25031` for the supplied allocation if its environment points elsewhere. `HEALTH_ENABLED=false` disables it. Routes:
+
+- `/healthz` (also `/health` and `/`): process liveness and current Discord gateway connection, never credentials.
+- `/diagnostics`: sanitized cached CoinGecko/AI check results with timestamps and safe reason codes; no raw provider/model output, chats, keys or environment dumps.
+- `/readyz`: HTTP 503 while Discord, price or AI checks are not ready; 200 once required checks pass (AI explicitly unconfigured is labeled). Use `/healthz` for basic uptime, not readiness.
+- `/health/price`: cached timestamp-validated BTC probe success/error, including `demo-key` vs `keyless` mode (not the key), upstream status and allowlisted plan-error code. This is a diagnostic snapshot, not a live-price API.
+
+At startup, one real BTC price probe and one small AI completion run asynchronously; Discord login is not delayed. Set `HEALTH_CHECK_AI=false` to skip the AI check (reported as untested). HTTP visitors cannot request new probes, choose tokens/URLs or consume your provider quota. `HEALTH_PROBE_INTERVAL_MINUTES=0` keeps price probes startup-only; optionally set 10–1440 for scheduled price checks. AI is only checked at startup. Startup probing consumes real API allowances; it does not test Discord command rendering, buttons, permission behavior or every AI tool. Snapshot health does not guarantee future provider availability.
+
+For this hosting address, after pulling/restarting, open **http://fi11.bot-hosting.cloud:25031/diagnostics**. Only sanitized status is public; do not send keys/passwords over this HTTP endpoint. Put TLS/restrictions in front if desired. Host port mapping/firewalls may still need panel configuration. The endpoint is not a deployment interface and grants no shell/filesystem access.
+
+For a console-only check on the host, run `npm run diagnose`. Add `DIAGNOSE_AI=true` for one actual AI check using the existing private bot configuration. Output is sanitized JSON. `pro_key_on_demo_endpoint` means a plan mismatch; `missing_or_invalid_key`, `access_denied_or_host_ip_blocked`, `rate_limited`, `timeout`, and `stale_or_invalid_price_timestamp` distinguish common failures without exposing raw API error bodies. Do not paste keys into chat or logs.

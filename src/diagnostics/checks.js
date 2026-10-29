@@ -41,11 +41,12 @@ async function checkAgentPrice(client, actions, config, { now = Date.now } = {})
     try {
         const { createAgent } = require('../ai/agent');
         const agent = createAgent({ client, actions, config, now, logger: { debug() {} } });
-        const answer = await agent.respond('What is the current BTC price in USDT? Fetch a fresh quote.', { sessionKey: 'diagnostic-price', signal: AbortSignal.timeout(25000), onTool: (intent, output) => { if (intent.command === 'price') { attempted = true; quote = output?.quote; } } });
+        const answer = await agent.respond('Bhai, BTC er price koto? USDT e bolo.', { sessionKey: 'diagnostic-price', signal: AbortSignal.timeout(25000), onTool: (intent, output) => { if (intent.command === 'price') { attempted = true; quote = output?.quote; } } });
         if (!attempted) return { status: 'error', reason: 'agent_did_not_call_price', checkedAt };
         if (!quote) return { status: 'error', reason: 'price_tool_failed', toolUsed: true, checkedAt };
         if (quote.currency !== 'USDT' || !answer.includes('BTC/USDT')) return { status: 'error', reason: 'wrong_quote_currency_or_answer', toolUsed: true, checkedAt };
-        return { status: 'ok', toolUsed: true, currency: 'USDT', checkedAt };
+        if (!/second age update/.test(answer)) return { status: 'error', reason: 'language_mismatch', toolUsed: true, checkedAt };
+        return { status: 'ok', toolUsed: true, currency: 'USDT', language: 'banglish', languageMatched: true, checkedAt };
     } catch (error) { return { ...failure(error), toolUsed: attempted, checkedAt }; }
 }
 module.exports = { readDemoKey, failure, checkPrice, checkAi, checkAgentPrice };

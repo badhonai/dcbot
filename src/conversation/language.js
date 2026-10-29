@@ -4,9 +4,9 @@ const STRONG = new Set('tumi apni tomake amake tomar amar kemon acho achho achis
 const WEAK = new Set('ami ki er ar na re to ta dao bol'.split(' '));
 function detectLanguage(input, prior = 'auto') {
     const value = String(input || '').replace(/https?:\/\/\S+|```[\s\S]*?```|`[^`]*`|<@!?\d+>/g, ' ');
-    const explicit = [...value.matchAll(/(?:reply|respond|answer|speak|write|translate|say|bolo|bol|likho|বলো|বলুন|লিখো|লিখুন).{0,30}?\b(banglish|bangla|bengali|english)\b|\b(banglish|bangla|bengali|english)(?:\s+(?:e|te|in|please))*\s+(?:bolo|bol|reply|answer|likho|please)|(?:বাংলিশে|বাংলায়|বাংলায়|ইংরেজিতে)\s*(?:বলো|বলুন|উত্তর|লিখো|লিখুন)/gi)];
+    const explicit = [...value.matchAll(/(?:reply|respond|answer|speak|write|translate|say)\s+(?:(?:this|it|that|the answer|your answer)\s+)?(?:in|into|to)\s+(banglish|bangla|bengali|english)\b|(?:reply|respond|answer|speak|write|say)\s+(banglish|bangla|bengali|english)\b|(?:bolo|bol|likho)\s+(banglish|bangla|bengali|english)\b|\b(banglish|bangla|bengali|english)(?:\s+(?:e|te|in|please))*\s+(?:bolo|bol|reply|answer|likho|please)|(?:বাংলিশে|বাংলায়|বাংলায়|ইংরেজিতে).{0,20}?(?:বলো|বলুন|উত্তর|লিখো|লিখুন|বুঝাও)/gi)];
     if (explicit.length) {
-        const match = explicit.at(-1); const language = (match[1] || match[2] || match[0]).toLowerCase();
+        const match = explicit.at(-1); const language = (match.slice(1).find(Boolean) || match[0]).toLowerCase();
         return /banglish|বাংলিশ/.test(language) ? 'banglish' : /bangla|bengali|বাংলা/.test(language) ? 'bn' : 'en';
     }
     if (/[\u0980-\u09ff]/.test(value)) return 'bn';

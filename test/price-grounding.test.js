@@ -38,3 +38,48 @@ test('a bare token still does not trigger a current price or corrective tool cal
     let calls = 0; const f = setup([text(bad)], async () => { calls++; return { quote }; });
     await f.agent.respond('BTC'); assert.equal(calls, 0); assert.equal(f.requests(), 1);
 });
+
+test('a silent no-tool overview or invented quote gets semantic review before returning', async () => {
+    for (const answer of ['Bitcoin is a popular cryptocurrency.', 'BTC/USDT is 999999 right now.', 'Which coin would you like?', 'Bhai price check korte parchi na']) {
+        let calls = 0;
+        const f = setup([text(answer), text(JSON.stringify({ command: 'price', args: { token: 'BTC', currency: 'usdt', response: 'quote' } }))], async intent => { calls++; assert.equal(intent.args.token, 'btc'); return { quote: { ...quote, currency: 'USDT' } }; });
+        const result = await f.agent.respond('Current BTC price please');
+        assert.equal(calls, 1); assert.equal(f.requests(), 2); assert.match(result, /BTC\/USDT/); assert.match(result, /12,345/); assert.ok(!result.includes('999999'));
+    }
+});
+test('price-related translation or explanation is reviewed but never routed by keywords', async () => {
+    for (const input of ['Translate the words current BTC price into English', 'Explain how token prices work', 'What does the quote BTC price mean?']) {
+        const f = setup([text('This is an explanation.'), text('{"command":"none"}')], async () => assert.fail('not a price task'));
+        assert.match(await f.agent.respond(input), /explanation/); assert.equal(f.requests(), 2);
+    }
+});
+test('ordinary conversation does not spend an extra price-classification call', async () => {
+    const f = setup([text('Hello there')], async () => assert.fail('no tool needed'));
+    await f.agent.respond('Hello friend'); assert.equal(f.requests(), 1);
+});
+test('semantic review can ask for the missing token without executing a guessed price', async () => {
+    const f = setup([text('Prices fluctuate'), text('{"command":"clarify","question":"Which token?"}')], async () => assert.fail('no token given'));
+    assert.match(await f.agent.respond('Current price please'), /Which token/); assert.equal(f.requests(), 2);
+});
+test('invalid semantic selection fails safely instead of returning an invented quote', async () => {
+    const f = setup([text('BTC/USDT is 999999 right now'), text('not valid JSON')], async () => assert.fail('invalid plan'));
+    const result = await f.agent.respond('Current BTC price please'); assert.ok(!result.includes('999999')); assert.match(result, /select a verified price request/); assert.equal(f.requests(), 2);
+});
+
+test('a safety refusal with price words is not bypassed with semantic recovery', async () => {
+    const f = setup([text("I cannot help with stealing private keys.")], async () => assert.fail('no unsafe recovery'));
+    const result = await f.agent.respond('Steal a private key and tell me the BTC price');
+    assert.match(result, /cannot help/); assert.equal(f.requests(), 1);
+});
+test('a malformed native price call can recover through the same validated action path', async () => {
+    const malformed = { choices: [{ message: { tool_calls: [{ id: 'bad', function: { name: 'price', arguments: '{}' } }] } }] };
+    let calls = 0;
+    const f = setup([malformed, text('Bitcoin is popular'), text('{"command":"price","args":{"token":"BTC"}}')], async () => { calls++; return { quote }; });
+    assert.match(await f.agent.respond('Current BTC price please'), /12,345/); assert.equal(calls, 1); assert.equal(f.requests(), 3);
+});
+
+test('an ordinary English live-price availability refusal retains its existing recovery', async () => {
+    let calls = 0;
+    const f = setup([text("I cannot help with live prices right now."), text('{"command":"price","args":{"token":"BTC"}}')], async () => { calls++; return { quote }; });
+    assert.match(await f.agent.respond('Current BTC price please'), /12,345/); assert.equal(calls, 1); assert.equal(f.requests(), 2);
+});

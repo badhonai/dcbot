@@ -41,7 +41,8 @@ test('continue can use tools for the active task but bare BTC still cannot auto-
 });
 test('a valid price on continue is not overwritten by the ambiguous bare-token guard', async () => {
     let round = 0;
-    const agent = createAgent({ config: {}, actions: { execute: async () => ({ quote: { price: 123 } }) }, client: client(async () => {
+    const agent = createAgent({ config: {}, actions: { execute: async () => ({ quote: { price: 123 } }) }, client: client(async input => {
+        if (input.messages[0].content.startsWith('You classify')) return done('{"command":"none"}');
         round++; return round === 2 ? tool('price', { token: 'BTC' }) : done(round === 3 ? 'BTC: $123 from the new fetch' : 'Ready for the next step');
     }) });
     await agent.respond('When I say next, fetch a new BTC price'); assert.match(await agent.respond('next'), /\$123/);

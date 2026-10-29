@@ -51,3 +51,16 @@ test('integration probe passes only with a genuine quote and matching Banglish a
  const result = await checkAgentPrice(model({ token: 'BTC/USDT', currency: 'usdt' }), { execute: async () => ({ quote: q }) }, {}, { now: () => now });
  assert.equal(result.status, 'ok'); assert.equal(result.languageMatched, true); assert.equal(result.currency, 'USDT'); assert.equal(result.selection, undefined); assert.equal(result.price, undefined);
 });
+
+test('host-style Banglish probe recovers when the primary model skips its tool call', async () => {
+ const responses = ['Bhai, Bitcoin popular ekta cryptocurrency', JSON.stringify({ command: 'price', args: { token: 'BTC', currency: 'usdt' } })];
+ let calls = 0;
+ const client = { chat: { completions: { create: async () => ({ choices: [{ message: { content: responses.shift() || 'unexpected extra call' } }] }) } } };
+ const result = await checkAgentPrice(client, { execute: async intent => { calls++; assert.equal(intent.command, 'price'); return { quote: q }; } }, {}, { now: () => now });
+ assert.equal(result.status, 'ok'); assert.equal(result.languageMatched, true); assert.equal(calls, 1); assert.equal(responses.length, 0);
+});
+test('semantic review gate supports price phrasing but does not select a token itself', () => {
+ const { needsPriceReview } = require('../src/ai/price-plan');
+ for (const input of ['BTC er price koto?', 'BTC er daam koto', 'বিটকয়েনের দাম কত?', 'বিটকয়েনের মূল্য কত?', 'What is the BTC quote?', 'BTC rate please']) assert.equal(needsPriceReview(input), true);
+ assert.equal(needsPriceReview('hello friend'), false); assert.equal(needsPriceReview('BTC'), false);
+});

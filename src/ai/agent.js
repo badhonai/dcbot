@@ -1,7 +1,7 @@
 const { isInability, safetyRefusal, eligible, blockedRead, searchFallback } = require('./public-fallback');
 const { detectLanguage, languageDirective, enforceLanguage, localizeFixed } = require('../conversation/language');
 const { profileMessage, PERSONALITY_RULES } = require('../conversation/personality');
-const { PRICE_PLAN_RULES, recoveredPrice } = require('./price-plan');
+const { PRICE_PLAN_RULES, recoveredPrice, needsPriceReview } = require('./price-plan');
 const { priceDetour, groundedQuote, safePriceFailure } = require('./price-grounding');
 const { IDS } = require('../features/coingecko-quotes');
 const { SessionMemory } = require('./session-memory');
@@ -106,7 +106,7 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                     let message = completion.choices?.[0]?.message;
                     let calls = message?.tool_calls || [];
                     if (!calls.length) {
-                        if (allowTools && !bare && !priceAttempted && !correctedDetour && priceDetour(message?.content)) {
+                        if (allowTools && !bare && !priceAttempted && !correctedDetour && (priceDetour(message?.content) || (!safetyRefusal(message?.content) && needsPriceReview(input)))) {
                             correctedDetour = true;
                             const recovery = await client.chat.completions.create({ model: config.model, temperature: 0, max_completion_tokens: 250, messages: [{ role: 'system', content: PRICE_PLAN_RULES }, ...old, { role: 'user', content: rememberedUser }] }, { signal: deadline });
                             const recovered = recoveredPrice(recovery);

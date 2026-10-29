@@ -147,3 +147,7 @@ Initial results are limited to 399 characters, with owner-checked More/Less and 
 ## AI-price integration diagnostics 1.1.3
 
 Added safe common pair-argument normalization and currency consistency checking, more specific market failure metadata, observed-action integration diagnostics with sanitized selection fields, startup AI-price reason logging and V8 heap-limit visibility. 334 offline tests pass on Node 22 and Node 24.22.1. The previous host's exact failure cause was not observable from its generic `price_tool_failed` snapshot; these diagnostics are intended to expose it if it recurs, not manufacture a passing probe. See README for confirmed observations and limits.
+
+## Skipped AI price action 1.1.4
+
+Broadened the bounded semantic recovery gate from English price-refusal output alone to price-related user phrasing, covering generic replies, localized refusals and ungrounded quotes when native tool calling is skipped. Actual selection remains model-classified and validated; bare tickers, translations, future instructions and unsafe/private requests are not permission to fetch prices. Successful native price calls are unchanged. 344 tests on Node 22/24.22.1 include the observed startup failure shape, safe non-price decisions and malformed native-call recovery. A new hosted check remains required after deployment.

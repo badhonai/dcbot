@@ -6,7 +6,7 @@ const { splitMessage } = require('../utils/split-message');
 const { createLogger, errorDetails } = require('../utils/logger');
 const safeMentions = { parse: [], repliedUser: false };
 function looksLikeRequest(text) {
-    return /^(?:don't|do not)\s+(?:reply|respond|message|talk)\b/i.test(text) || /[?？؟]|https:\/\//i.test(text) || /^(?:what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help|stop|unsubscribe|mute|pause)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
+    return /^(?:don't|do not)\s+(?:reply|respond|message|talk)\b/i.test(text) || /[?？؟]|https:\/\//i.test(text) || /^(?:quiz|riddle|trending|news|icebreaker|what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help|stop|unsubscribe|mute|pause)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কুইজ|ধাঁধা|কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
 }
 function createAgentMessageHandler({ client, config, queue, agent, preferences, controls, boundaries, logger = createLogger('chat'), now = Date.now }) {
     const allowed = new Set(config.channels); const cooldowns = new Map();

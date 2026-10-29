@@ -52,5 +52,5 @@ test('recovery never permits shell tools, invalid currencies or fabricated pair 
 test('startup integration probe verifies actual AI price tool execution and USDT answer', async () => {
     const client = { chat: { completions: { create: async () => ({ choices: [{ message: { tool_calls: [{ id: 'q', function: { name: 'price', arguments: '{"token":"BTC","currency":"usdt"}' } }] } }] }) } } };
     const result = await checkAgentPrice(client, { execute: async () => ({ quote: { symbol: 'BTC', price: 100, currency: 'USDT', kind: 'aggregate', ageSeconds: 1, source: 'CoinGecko' } }) }, {});
-    assert.equal(result.status, 'ok'); assert.equal(result.toolUsed, true); assert.equal(result.currency, 'USDT'); assert.ok(!JSON.stringify(result).includes('100'));
+    assert.equal(result.status, 'ok'); assert.equal(result.toolUsed, true); assert.equal(result.currency, 'USDT'); assert.deepEqual(Object.keys(result).sort(), ['checkedAt', 'currency', 'language', 'languageMatched', 'status', 'toolUsed'].sort());
 });

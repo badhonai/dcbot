@@ -1,12 +1,14 @@
 const path = require('node:path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Options } = require('discord.js');
 const { createModelClient } = require('./ai/provider-client');
 const { loadConfig } = require('./config');
 const { ChannelQueue } = require('./conversation/channel-queue');
-const { Actions } = require('./features/actions');
+const { Actions, TOOL_DEFINITIONS } = require('./features/actions');
 const { createAgent } = require('./ai/agent');
 const { WebService } = require('./features/web');
+const { CommunityMarket } = require('./features/community-market');
+const { CommunityResearch } = require('./features/community-research');
 const { createHandlers } = require('./discord/handlers');
 const { PublicApi } = require('./integrations/public-api');
 const { MarketService } = require('./features/market');
@@ -29,7 +31,11 @@ async function main() {
     const knowledge = new KnowledgeService(path.resolve(__dirname, '../knowledge'));
     log.info('Settings ready', { channels: config.channels.length, aiChat: config.ollamaApiKey || config.groqApiKey ? 'enabled' : 'disabled', projects: knowledge.projects.length });
     if (!knowledge.projects.length) log.info('Project docs not added yet', { setup: 'knowledge/projects.json' });
-    const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+    const client = new Client({ makeCache: Options.cacheWithLimits({
+        ...Options.DefaultMakeCacheSettings, MessageManager: 0, PresenceManager: 0,
+        GuildMemberManager: { maxSize: 20, keepOverLimit: member => member.id === member.client.user?.id },
+        UserManager: { maxSize: 100, keepOverLimit: user => user.id === user.client.user?.id },
+    }), intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
     const commandSync = new GuildCommandSync({ rest: client.rest, commands, logger: log.child('command-sync') });
     const queue = new ChannelQueue(config.maxPendingPerChannel);
     const preferences = new ReplyPreferences(path.resolve(__dirname, '../data/reply-preferences.json'));
@@ -39,7 +45,8 @@ async function main() {
     const publicApi = new PublicApi({ logger: log.child('market-api'), coingeckoApiKey: demoKey });
     const market = new MarketService(publicApi);
     const web = new WebService({ apiKey: config.ollamaApiKey });
-    const actions = new Actions({ market, knowledge, web });
+    const actions = new Actions({ market, knowledge, web, communityMarket: new CommunityMarket(publicApi), research: new CommunityResearch(web) });
+    log.info('Community tools ready', { slashCommands: commands.length, aiTools: TOOL_DEFINITIONS.length, games: 'offline', mode: 'read-only, no personal assistant features' });
     const controls = new PublicControls({ preferences, actions, boundaries, logger: log.child('controls') });
     const modelClient = createModelClient(config, { logger: log.child('ai') });
     const health = createHealthServer({ checkPrice: () => checkPrice(publicApi, { key: demoKey }), checkAi: () => checkAi(modelClient), checkAgentPrice: () => checkAgentPrice(modelClient, actions, config), discordReady: () => client.isReady(), logger: log.child('health') });
@@ -70,17 +77,18 @@ async function main() {
     async function shutdown(signal) {
         if (stopping) return;
         stopping = true;
+        queue.close();
         log.info('Shutdown requested', { signal, pendingChannels: queue.channels.size });
         client.off(Events.GuildCreate, onGuildCreate);
         client.off('messageCreate', handlers.onMessage);
         client.off('interactionCreate', onInteraction);
         const deadline = setTimeout(() => {
             log.error('Shutdown deadline exceeded', { timeoutMs: 15000, hint: 'Pending work was interrupted' });
-            replies.destroy(); client.destroy(); process.exit(1);
+            controls.destroy(); replies.destroy(); client.destroy(); process.exit(1);
         }, 15000);
         deadline.unref();
         try {
-            await Promise.all([queue.drain(), commandSync.stop(), health.stop()]); replies.destroy(); client.destroy();
+            await Promise.all([queue.drain(), onInteraction.drain(), commandSync.stop(), health.stop()]); controls.destroy(); replies.destroy(); client.destroy();
             log.info('Shutdown complete');
         } catch (error) {
             log.error('Shutdown failed', errorDetails(error)); process.exitCode = 1;

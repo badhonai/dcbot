@@ -88,4 +88,4 @@ class MarketService {
         return pages(cards);
     }
 }
-module.exports = { MarketService, quoteMoney, money, compactMoney, chainIds, addressFor };
+module.exports = { MarketService, quoteMoney, money, compactMoney, percent, chainIds, addressFor };

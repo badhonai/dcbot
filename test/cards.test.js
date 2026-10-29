@@ -16,8 +16,8 @@ function interaction() {
     const edits = [];
     return { user: { id: 'owner' }, edits, editReply: async payload => edits.push(payload), deleteReply: async () => {} };
 }
-test('help uses two short cards instead of a wall of text', () => {
-    assert.equal(HELP.pages.length, 2);
+test('help uses three short cards instead of a wall of text', () => {
+    assert.equal(HELP.pages.length, 3);
     for (const page of HELP.pages) { validate(page); assert.ok(serialize(page).length < 1100); }
     assert.match(serialize(HELP), /@mention replies are public/);
 });

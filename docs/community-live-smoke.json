@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-10-29T08:27:31.227Z",
+  "environment": "workspace, keyless CoinGecko, not the Discord host",
+  "checks": {
+    "compare": {
+      "status": "ok",
+      "cards": 1,
+      "currency": "USDT",
+      "sourceCount": 2
+    },
+    "trending": {
+      "status": "ok",
+      "cards": 1,
+      "sourceCount": 7
+    },
+    "coin": {
+      "status": "ok",
+      "cards": 1,
+      "providerId": "bitcoin"
+    }
+  }
+}

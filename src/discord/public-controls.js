@@ -110,5 +110,10 @@ class PublicControls {
             await this.execute(id, state, true);
         } finally { state.busy = false; }
     }
+    destroy() {
+        for (const state of this.sessions.values()) state.abort?.abort();
+        this.sessions.clear(); this.cooldowns.clear();
+    }
+
 }
 module.exports = { PublicControls };

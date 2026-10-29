@@ -1,8 +1,7 @@
 const IDS = { btc: 'bitcoin', eth: 'ethereum', sol: 'solana', sui: 'sui', apt: 'aptos', bnb: 'binancecoin', xrp: 'ripple', ada: 'cardano', doge: 'dogecoin', avax: 'avalanche-2', link: 'chainlink', dot: 'polkadot', ltc: 'litecoin', ton: 'the-open-network', usdt: 'tether', usdc: 'usd-coin' };
 class CoinGeckoQuotes {
     constructor(api, { now = Date.now, maxAgeMs = 120000 } = {}) { this.api = api; this.now = now; this.maxAgeMs = maxAgeMs; }
-    async get(query, { currency = 'usdt' } = {}) {
-        if (!['usd', 'usdt'].includes(currency)) throw new Error('Unsupported quote currency');
+    async resolve(query) {
         const input = query.trim().toLowerCase();
         if (!/^[a-z0-9-]{1,100}$/.test(input)) throw Object.assign(new Error('Use a CoinGecko ID or common ticker.'), { code: 'LIVE_UNAVAILABLE' });
         let id = Object.hasOwn(IDS, input) ? IDS[input] : input;
@@ -15,6 +14,11 @@ class CoinGeckoQuotes {
             id = matches[0].id; symbol = matches[0].symbol.toUpperCase();
             if (!/^[a-z0-9-]{1,100}$/.test(id)) throw new Error('Invalid provider coin ID');
         }
+        return { id, symbol };
+    }
+    async get(query, { currency = 'usdt' } = {}) {
+        if (!['usd', 'usdt'].includes(currency)) throw new Error('Unsupported quote currency');
+        const { id, symbol } = await this.resolve(query);
         const ids = currency === 'usdt' ? [...new Set([id, 'tether'])].join(',') : id;
         const { data, fetchedAt } = await this.api.get(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=usd&include_last_updated_at=true`, 0);
         const validate = entry => {

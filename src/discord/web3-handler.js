@@ -4,6 +4,7 @@ const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
 const { createLogger, errorDetails } = require('../utils/logger');
 const { SPECS } = require('../features/actions');
+const COMMAND_NAMES = new Set(require('./commands').commands.map(c => c.name));
 const { explain } = require('../features/glossary');
 const { card, pages, notice, clip } = require('../utils/cards');
 const HELP = pages(
@@ -14,6 +15,10 @@ const HELP = pages(
         { name: 'Your replies', value: '`/stop` Mute automatic replies to you\n`/start` Turn them back on' },
         { name: 'Try it', value: '`/price token:BTC`\n`/explain term:slippage`' },
     ] }),
+    card('Community tools', 'Research and games, without personal profiles.', { fields: [
+        { name: 'Community research', value: '`/coin` Token fundamentals\n`/compare` 2–4 token USDT comparison\n`/trending` Search interest\n`/news` Crypto news\n`/x` Public X evidence, not full timelines' },
+        { name: 'Community fun', value: '`/fun` Quiz, riddle, fact, icebreaker or debate\n`/answer` Check an attempt using its question ID\nNo scores, gambling, profiles or automatic posts' },
+    ] }),
     card('Good to know', '', { fields: [
         { name: 'Privacy', value: 'Slash results: only you. Dismiss anytime. Auto-deletion is best effort while online.\nNormal @mention replies are public.' },
         { name: 'Networks', value: 'Ethereum · Solana · Base · BSC\nArbitrum · Polygon · Optimism · Avalanche' },
@@ -22,7 +27,8 @@ const HELP = pages(
 );
 function createWeb3Handler({ config, market, knowledge, replies, actions, agent, preferences, controls, boundaries, logger = createLogger('commands') }) {
     const cooldowns = new Map(); let active = 0;
-    return async function onInteraction(interaction) {
+    const pending = new Set(); let closing = false;
+    const handle = async function onInteraction(interaction) {
         try {
             if (interaction.isButton?.() && interaction.customId.startsWith('agent:')) {
                 try { if (controls) await controls.onButton(interaction); }
@@ -40,7 +46,7 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                 await replies.onButton(interaction); return;
             }
             if (!interaction.isChatInputCommand()) return;
-            if (!['start','stop','chat','search','read','help','ask','official','price','pair','newpairs','explain'].includes(interaction.commandName)) return;
+            if (!COMMAND_NAMES.has(interaction.commandName)) return;
             // Acknowledge privately BEFORE external work. Every result/error stays on this interaction.
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             if (['start', 'stop'].includes(interaction.commandName)) {
@@ -90,8 +96,9 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                         const found = await actions.execute({ command: 'read_page', args: { url: option('url') } });
                         result = pages(card(found.title, clip(found.content || 'No readable text found.', 1000), { url: found.url, footer: 'Webpage excerpt · Use /chat to request a summary' }));
                     } else if (actions && interaction.commandName !== 'help') {
-                        const args = Object.fromEntries(Object.keys(SPECS[interaction.commandName].properties).map(name => [name, option(name)]).filter(([, value]) => value));
-                        result = await actions.execute({ command: interaction.commandName, args });
+                        const command = interaction.commandName === 'x' ? 'x_research' : interaction.commandName;
+                        const args = Object.fromEntries(Object.keys(SPECS[command].properties).map(name => [name, option(name)]).filter(([, value]) => value));
+                        result = await actions.execute({ command, args });
                     } else switch (interaction.commandName) {
                         case 'help': result = HELP; break;
                         case 'ask': result = knowledge.ask(option('project'), option('question')); break;
@@ -127,5 +134,13 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
             } catch { /* Expired interaction or lost channel access. Never fall back to a public message. */ }
         }
     };
+    const onInteraction = interaction => {
+        if (closing) return Promise.resolve();
+        const work = handle(interaction); pending.add(work);
+        work.then(() => pending.delete(work), () => pending.delete(work));
+        return work;
+    };
+    onInteraction.drain = async () => { closing = true; await Promise.allSettled([...pending]); };
+    return onInteraction;
 }
 module.exports = { createWeb3Handler, HELP };

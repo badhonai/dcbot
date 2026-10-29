@@ -8,7 +8,7 @@ An AI-first informational community member, **not a moderator**. No administrato
 | --- | --- |
 | `/start` | Resume automatic replies to your messages |
 | `/stop` | Stop automatic replies to you (other users are unaffected) |
-| `/chat message:…` | Private AI help: explanations, drafting, translation, research and summaries |
+| `/chat message:…` | Private community help: explanations, translation, research and summaries |
 | `/search query:…` | Web search with sources (Ollama free-account allowance required) |
 | `/read url:https://…` | Read an excerpt from a public webpage |
 | `/help` | Commands, privacy, data sources and limitations |
@@ -21,6 +21,15 @@ An AI-first informational community member, **not a moderator**. No administrato
 | `/pair chain:ethereum address:…` | Up to five base-token pools for a **token** contract, ordered by liquidity |
 | `/newpairs chain:solana` | Up to eight recently created pools; NOT verified new projects |
 | `/explain term:slippage` | Curated Web3 glossary without AI costs |
+| `/coin token:BTC` | Provider-listed project fundamentals, supply, USD cap/FDV and links; not vetted |
+| `/compare tokens:BTC, ETH, SOL` | Compare 2–4 assets with one fresh USDT cross-rate batch |
+| `/trending` | Trending CoinGecko searches, not gainers or endorsements |
+| `/news topic:ethereum` | Crypto news snippets with source links; check publication dates |
+| `/x query:@ethereum` | Public indexed X profile evidence; no authenticated timeline |
+| `/x query:https://x.com/…/status/…` | Attempt a guarded public post read, then indexed evidence if needed |
+| `/fun activity:quiz language:banglish` | Offline crypto quizzes, riddles, facts, icebreakers or debates |
+| `/answer id:q1 choice:A` | Check a curated game answer; use `choice:reveal` to reveal |
+
 
 Supported chain names: `ethereum` (also `eth`), `solana`, `base`, `bsc`, `arbitrum`, `polygon`, `optimism`, `avalanche`.
 
@@ -51,7 +60,7 @@ For a fresh exchange last trade, explicitly request one or use `/price token:BTC
 
 ### Checking, refresh and personal opt-out
 
-Public requests first show a short **Thinking and checking** placeholder, then safe tool-status text such as **Checking the latest price**. The final answer replaces the placeholder; internal reasoning is never exposed. Slash commands use Discord's private deferred thinking state. Ordinary answers default to 1–3 short sentences, with one compact source link; detail is reserved for explicit requests. There is no extra model call just to produce a thinking paragraph, nor a forced web search for tasks that do not need current facts.
+Public requests first show a short **Thinking and checking** placeholder, then safe tool-status text such as **Checking the latest price**. The final answer replaces the placeholder; internal reasoning is never exposed. Slash commands use Discord's private deferred thinking state. Ordinary answers default to 1–3 short sentences, with compact source links (up to three when actually cited); detail is reserved for explicit requests. There is no extra model call just to produce a thinking paragraph, nor a forced web search for tasks that do not need current facts.
 
 Ordinary public chat has **no buttons**, including its checking placeholder. A crypto-price answer gets **Refresh price** only after the agent actually calls the validated price tool (or the user invokes `/price`). Refresh re-executes just the recorded price request(s), not the original conversation, search or another model round. Existing reply chunks are updated and obsolete chunks are removed. Private `/chat` price answers and direct `/price` results also get price refresh; pool/discovery/search/read commands do not. Refresh bypasses the bot price cache but cannot force an upstream price change. Controls are owner-checked, rate-limited, process-local and expire after about 10 minutes or a restart; capacity eviction can expire them earlier.
 
@@ -314,3 +323,26 @@ Chat now applies an explicit current-turn language directive in addition to the 
 A wrong-language response to a Bangla/Banglish request gets at most one tool-free language-repair completion. URLs, code, timestamps, numeric values and pair identifiers are protected by placeholders and validated before restoration; repairs cannot introduce new numeric values or links. Failed repairs return a short localized failure instead of silently falling back to English. This adds latency only on a detected mismatch. Verified numeric quotes, common checking states and boundary notices use fixed localization without extra AI calls; names, source labels, tickers and USDT are preserved.
 
 Casual banter can get occasional light teasing without requiring the exact words `roast me`; serious requests, corrections and teasing opt-outs take priority. The startup AI-price integration probe now asks in Banglish and checks language matching alongside actual price-tool use.
+
+## Lightweight community release (1.1.0)
+
+This is a community bot, **not a personal assistant**. No personal portfolios, wallet tracking, reminders, persistent personal profiles, unsolicited DMs, social publishing or post/announcement drafting workflows were added. Existing consent/abuse-boundary storage and scoped short-lived chat context are retained; new community tools do not write member data to disk. No new runtime dependencies.
+
+The bot has **19 slash commands and 19 validated AI tools**. `/help` is three compact private pages. Ordinary channel chat can use the same tools through AI; bare tickers still do not automatically become price requests. Try `Compare BTC and ETH`, `Research this X post: <public URL>`, `Bhai, quiz dao`, or `Give us a community icebreaker`. Only explicit requests trigger fun replies; there is no auto-posting or background engagement loop. Slash results remain private, including games; request a game in allowed channel chat for a public question.
+
+### Research caveats
+
+- `/compare` fetches both/all requested coins and Tether in one uncached `/simple/price` batch. It validates each leg within 120 seconds and rejects future/invalid timestamps, nonpositive values and non-finite cross-rates. A bad base token stays unavailable without hiding another valid token. Tether failure blocks the entire comparison. Prices are USDT; cap/volume/24h price changes remain explicitly **USD** aggregates. No investment ranking, price parity assumption or stale fallback. Aliases for the same asset cannot form a fake comparison.
+- `/coin` caches provider fundamentals for five minutes. Its description and homepage/X links are **provider-listed**, not owner-approved, verified or safety-checked. Missing supply remains unknown; supply does not imply an unlock calendar. `/official` is still the only owner-approved-link workflow. `/trending` caches for two minutes and measures search interest, not gains, new launches or endorsements.
+- `/news` and X searches use the existing Ollama search allowance. Groq fallback does not restore search access. Public X posts often require login/JavaScript and cannot be read. X research never bypasses controls or promises complete timelines, protected/deleted content, current followers, engagement counts or account authenticity. It labels indexed snippets separately from actually read public page excerpts. No evidence is not proof of account/post absence. Paste public post text if inaccessible. Retrieval time is not publication time.
+- Fun is a curated offline bank: **12 crypto quizzes, 6 riddles, 6 icebreakers, 4 debate prompts and 4 learning cards**. Questions/choices/feedback support English, Bangla and Banglish. Correct answers are not included in the initial quiz/riddle tool result. Attempts are checked by fixed question IDs, without saved scores, leaderboards, prizes or gambling. Repeated random questions are possible; no per-member selection history is stored.
+
+### Small-host safeguards
+
+`npm start` uses `--max-old-space-size=128`. This caps V8 old-space, **not total process RSS**. If the hosting panel bypasses npm, use `node --max-old-space-size=128 index.js` or its supported Node options setting. Node 22+ is required. The exact 256 MB/25% CPU/512 MB host still needs monitoring; this release does not guarantee unlimited guilds, traffic or AI allowance.
+
+Discord message/presence caching is disabled and member/user caches are bounded. Chat continuity retains up to ten exchanges with a global two-million-character memory budget; oldest sessions can be evicted under pressure. Model history is capped at 20,000 characters by dropping whole oldest exchanges, preserving ordering. This is a character budget, not exact model-token accounting. There is no added AI summarization call or persisted chat database.
+
+Market JSON is limited to 1 MiB decoded per response; API cache is limited to 4 MiB/100 entries and pending unique requests to six. Search and direct Ollama completion JSON are capped at 256 KiB. Non-cancelable direct search calls coalesce identical requests and use a 30-second/32-entry snippet cache; cached retrieval timestamps are retained. Signal-controlled agent searches stay independent to avoid cross-request cancellation. Existing page reads remain capped at 512 KiB with pinned public DNS and redirect checks. Channel work is capped globally at 20 requests as well as per channel. Shutdown refuses new queued work, drains both public and private requests with the existing 15-second deadline, and cancels/releases controls.
+
+`GET /healthz` now reports diagnostic version 3 and coarse process RSS/heap/uptime values, without chat, account or credential data. Visits never trigger upstream calls. `npm run check:budget` runs an **offline synthetic store stress check**, not a real Discord/AI load test. See [release review and limits](docs/COMMUNITY-RELEASE.md) and [deployment runbook](docs/PRODUCTION.md) before rollout.

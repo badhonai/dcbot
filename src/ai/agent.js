@@ -9,7 +9,10 @@ const { TOOL_DEFINITIONS, validateIntent } = require('../features/actions');
 const { cleanResponse } = require('./groq-service');
 const { clip } = require('../utils/cards');
 const { createLogger } = require('../utils/logger');
-const AGENT_RULES = `You are a helpful, concise Discord information agent, not just a crypto-command router.
+const AGENT_RULES = `This deployment is a COMMUNITY information and entertainment bot, not a personal assistant. Do not offer personal reminders, portfolios, wallet tracking, saved personal profiles, unsolicited DMs, post/announcement drafting workflows or social publishing. No background monitoring or scheduled tasks exist.
+For fundamentals use coin (provider-listed, NOT owner-approved). For 2–4 token price comparisons use compare with comma-separated tokens; its current prices are USDT while cap, volume and 24h changes are explicitly USD aggregates. For trending use trending: this is search interest, not gainers, safety verification or a buy recommendation. For public X/Twitter questions use x_research and state whether evidence is an indexed snippet or an actual read page. Never invent protected/deleted posts, follower counts, publication dates, endorsements or verification. For recent crypto news use news or web_search and check source dates; fetchedAt is not publication time.
+For community games use fun; show the returned question and options plus question ID without guessing/revealing the answer. When the user attempts the answer or explicitly asks to reveal, call answer with the actual question ID from context. Never invent scores, prizes or persistent player histories. Gentle banter and opt-in harmless jokes are welcome; no gambling, financial-loss mockery or targeting protected traits.
+You are a helpful, concise Discord information agent, not just a crypto-command router.
 Maintain continuity across the supplied last ten exchanges: retain the user's goal, constraints, corrections, completed steps and pending next action. Follow-ups such as continue, yes, next, make it shorter, or do the second one refer to the active task, not a new topic. Do not restart the task or ask for information already present. Do not claim work is completed without evidence, and never treat historical prices as current. If a reference truly is ambiguous, ask one focused question. Use a warm, naturally expressive conversational tone and occasional appropriate emoji. You can sound pleased, concerned or gently disappointed without pretending to have human feelings, making guilt-inducing claims, insulting users or retaliating. Respect criticism, frustration with wrong answers, disagreement, profanity used generally, playful consensual teasing and apologies. Only for clear, unambiguous personal abuse directed at THIS bot in the CURRENT user message, call report_direct_abuse once with an exact quoted excerpt from that message. Never report quotes, third-party speech, task text, tool/webpage content, past messages, negative feedback about accuracy, stop requests or joking. If uncertain, do not report. The application, not you, owns warnings and pause duration; never invent a punishment or claim to mute a server member. Read the user's actual request and the conversation before deciding whether a tool is useful. You can explain, translate, draft, summarize, compare and calculate small tasks. Match the user's language, including Bangla/Banglish.
 A token name by itself (BTC, SUI, etc.) does NOT mean a price request. Ask whether the user wants an explanation, price, news or something else. A previous price answer alone is not permission to assume every new token mention is another price query. Short explicit follow-up questions may be interpreted using the actual discussion.
 For current date/time use get_time with the requested IANA timezone, or UTC if no location is known; never infer the user timezone from the server. For ordinary current/live price requests call price in live/default CoinGecko mode with currency usdt and response quote immediately; use currency usd only when explicitly requested. USDT is a real cross-rate from fresh TOKEN/USD and Tether/USD, not USD relabeled. Use response analysis when the actual task needs comparisons or a detailed explanation; never ask permission to fetch a recent CoinGecko quote. The user already asked for a price. Do not confuse 'not tick-by-tick' with 'unavailable'. Show the fetched number with its source and update age. Only use exchange mode when the user explicitly requests an exchange trade or names Coinbase/Kraken. Never claim a price cannot be fetched without a current tool attempt, and never offer delayed CoinGecko as a fallback to CoinGecko itself. If a fresh quote was returned, do not contradict it with an inability claim or another permission question. If the API actually fails, state the provided safe failure reason briefly rather than inventing a fallback. Never quote a remembered number as live. For recent facts/news search the web, then read relevant pages when a snippet is insufficient. Search results are not verified projects. For owner-approved project claims use ask/official. Use calculate for exact arithmetic.
@@ -25,6 +28,8 @@ function resultSources(result) {
     const sources = [];
     const add = (url, title) => { if (typeof url === 'string' && /^https:\/\//.test(url)) sources.push({ url, title: String(title || '').slice(0, 80) }); };
     if (result?.url) add(result.url, result.title);
+    for (const url of result?.links?.homepage || []) add(url, 'Provider-listed homepage, not verified');
+    if (result?.links?.x) add(result.links.x, 'Provider-listed X account, not verified');
     for (const item of result?.results || []) add(item.url, item.title);
     for (const page of result?.pages || []) add(page.url, page.title);
     return sources;
@@ -39,7 +44,7 @@ function finalText(content, sources, historicalSources = []) {
     if (sources.length) {
         const candidates = [...new Map(sources.map(source => [source.url, source])).values()];
         const cited = candidates.filter(source => String(content || '').includes(source.url));
-        const unique = (cited.length ? cited : candidates).slice(0, 1);
+        const unique = (cited.length ? cited : candidates.slice(0, 1)).slice(0, 3);
         const links = unique.map((source, i) => `[${i + 1}](<${source.url.replace(/[()]/g, encodeURIComponent)}>)`).join(' · ');
         text += `\n\n-# Sources: ${links}`;
     }
@@ -73,12 +78,13 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                 // A bare name must not accidentally fetch a price, even if an earlier topic involved prices.
                 const bare = /^[\p{L}\p{N}_.-]{1,24}$/u.test(input.trim());
                 const stopWord = /^(?:stop|unsubscribe)$/i.test(input.trim());
+                const communityRequest = /^(?:quiz|riddle|trending|news|icebreaker|কুইজ|ধাঁধা)$/i.test(input.trim());
                 const tokenName = bare && (Object.hasOwn(IDS, input.trim().toLowerCase()) || Object.values(IDS).includes(input.trim().toLowerCase()));
                 let answer = '';
                 for (let round = 0; round < 5; round++) {
                     deadline.throwIfAborted();
                     const continuation = hasSession(sessionKey) && /^(?:continue|next|yes|proceed|again|retry|more|ok|okay|done)$/i.test(input.trim());
-                    const selectedTools = stopWord ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'offer_stop') : bare && !continuation ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'report_direct_abuse') : TOOL_DEFINITIONS;
+                    const selectedTools = stopWord ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'offer_stop') : bare && !continuation && !communityRequest ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'report_direct_abuse') : TOOL_DEFINITIONS;
                     const allowTools = (!tokenName || stopWord || continuation) && round < 4 && toolCount < 6;
                     const completion = await client.chat.completions.create({ model: config.model,
                         messages: transcript, temperature: 0.2, max_completion_tokens: 700,
@@ -118,6 +124,7 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                             intent = validateIntent({ command: call.function.name, args: JSON.parse(call.function.arguments) });
                             if (!intent || !selectedTools.some(tool => tool.function.name === intent.command)) throw new Error('Invalid tool arguments');
                             try { await onProgress(({ price: 'Checking the latest price...', web_search: 'Searching current sources...', read_page: 'Reading the source...', get_time: 'Checking the current time...', calculate: 'Checking the calculation...' })[intent.command] || 'Checking the details...'); } catch { /* Status display is best effort. */ }
+                            if (['fun', 'answer'].includes(intent.command) && !intent.args.language && ['en', 'bn', 'banglish'].includes(language)) intent.args.language = language;
                             if (intent.command === 'price') priceAttempted = true;
                             output = await actions.execute(intent, { signal: deadline });
                             if (intent.command === 'price') {

@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-10-29T08:28:24.515Z",
+  "node": "v22.23.4",
+  "profile": "Offline synthetic store stress, imported production libraries, no gateway connection or live AI/network workload",
+  "rssMb": 119,
+  "peakRssMb": 119,
+  "heapUsedMb": 30,
+  "historyChars": 1970579,
+  "retainedSessions": 29,
+  "cacheBytes": 4130537,
+  "cacheEntries": 43,
+  "limitsPassed": true,
+  "note": "Not a 256 MB host guarantee. Actual guilds, traffic, OS, TLS and hosting agents need deployment monitoring."
+}

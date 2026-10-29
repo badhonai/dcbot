@@ -27,7 +27,7 @@ function createHealthServer({ checkPrice, checkAi, checkAgentPrice, discordReady
         try { route = new URL(request.url, 'http://health.invalid').pathname; } catch { route = ''; }
         let status = 200; let body;
         if (!['GET', 'HEAD'].includes(request.method)) { status = 405; response.setHeader('Allow', 'GET, HEAD'); body = { error: 'method_not_allowed' }; }
-        else if (['/', '/health', '/healthz'].includes(route)) body = { status: 'ok', service: 'discord-info-bot', diagnosticsVersion: 2, discord: discordReady() ? 'connected' : 'disconnected', routes: ['/healthz', '/readyz', '/health/price', '/diagnostics'] };
+        else if (['/', '/health', '/healthz'].includes(route)) body = { status: 'ok', service: 'discord-info-bot', diagnosticsVersion: 3, runtime: { rssMb: Math.round(process.memoryUsage().rss / 1048576), heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1048576), uptimeSeconds: Math.floor(process.uptime()) }, discord: discordReady() ? 'connected' : 'disconnected', routes: ['/healthz', '/readyz', '/health/price', '/diagnostics'] };
         else if (route === '/diagnostics' || route === '/readyz') {
             const ready = discordReady() && state.price.status === 'ok' && ['ok', 'not_configured', 'not_checked'].includes(state.ai.status) && ['ok', 'not_configured', 'not_checked'].includes(state.agentPrice.status);
             if (route === '/readyz' && !ready) status = 503;
@@ -36,6 +36,7 @@ function createHealthServer({ checkPrice, checkAi, checkAgentPrice, discordReady
         else { status = 404; body = { error: 'not_found' }; }
         response.writeHead(status); response.end(request.method === 'HEAD' ? undefined : JSON.stringify(body));
     });
+    server.maxConnections = 20;
     return {
         server, probe,
         async start({ port = 25031, intervalMinutes = 0, testAi = true } = {}) {

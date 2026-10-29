@@ -1,4 +1,5 @@
 const Groq = require('groq-sdk');
+const { boundedJson } = require('../integrations/bounded-json');
 const { cleanResponse } = require('./groq-service');
 const { createLogger } = require('../utils/logger');
 
@@ -72,12 +73,12 @@ function createOllamaClient({ apiKey, timeoutMs = 30000, maxTokens = 1024, fetch
         });
         if (!response.ok) {
             let data;
-            try { data = await response.json(); } catch { data = {}; }
+            try { data = await boundedJson(response, 16384); } catch { data = {}; }
             const detail = typeof data?.error === 'string' ? data.error : data?.error?.message || data?.message || '';
             // The detail is used only to classify quota failures; never log or return it to Discord.
             throw Object.assign(new Error(detail || 'Ollama request failed'), { status: response.status, headers: response.headers, code: data?.error?.code });
         }
-        try { return await response.json(); }
+        try { return await boundedJson(response, 256 * 1024); }
         catch { throw Object.assign(new Error('Invalid Ollama response'), { status: 502, code: 'BAD_RESPONSE' }); }
     } } } };
 }

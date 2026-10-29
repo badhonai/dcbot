@@ -10,36 +10,37 @@ function resolveSymbol(query) {
 }
 class LiveQuotes {
     constructor(api, { now = Date.now, maxAgeMs = 30000 } = {}) { this.api = api; this.now = now; this.maxAgeMs = maxAgeMs; }
-    validate({ symbol, price, tradedAt, fetchedAt, source, sourceLabel, url }) {
+    validate({ symbol, price, tradedAt, fetchedAt, source, sourceLabel, url, currency = 'USD' }) {
         const age = this.now() - tradedAt;
         if (!Number.isFinite(tradedAt) || age > this.maxAgeMs || age < -5000 || !Number.isFinite(Number(price)) || Number(price) <= 0) {
             throw Object.assign(new Error('No fresh trade returned'), { code: 'STALE_QUOTE' });
         }
-        return { symbol, price: Number(price), tradedAt: new Date(tradedAt).toISOString(), fetchedAt,
+        return { symbol, currency, price: Number(price), tradedAt: new Date(tradedAt).toISOString(), fetchedAt,
             ageSeconds: Math.max(0, Math.floor(age / 1000)), source, sourceLabel, url };
     }
-    async coinbase(symbol) {
-        const { data, fetchedAt } = await this.api.get(`https://api.exchange.coinbase.com/products/${encodeURIComponent(symbol)}-USD/ticker`, 0);
-        return this.validate({ symbol, price: data.price, tradedAt: Date.parse(data.time), fetchedAt,
-            source: 'Coinbase Exchange', sourceLabel: 'Coinbase', url: `https://exchange.coinbase.com/trade/${symbol}-USD` });
+    async coinbase(symbol, currency = 'usd') {
+        const { data, fetchedAt } = await this.api.get(`https://api.exchange.coinbase.com/products/${encodeURIComponent(symbol)}-${currency.toUpperCase()}/ticker`, 0);
+        return this.validate({ symbol, currency: currency.toUpperCase(), price: data.price, tradedAt: Date.parse(data.time), fetchedAt,
+            source: 'Coinbase Exchange', sourceLabel: 'Coinbase', url: `https://exchange.coinbase.com/trade/${symbol}-${currency.toUpperCase()}` });
     }
-    async kraken(symbol) {
+    async kraken(symbol, currency = 'usd') {
         const base = ({ BTC: 'XBT', DOGE: 'XDG' })[symbol] || symbol;
-        const { data, fetchedAt } = await this.api.get(`https://api.kraken.com/0/public/Trades?pair=${encodeURIComponent(base)}USD&count=1`, 0);
+        const { data, fetchedAt } = await this.api.get(`https://api.kraken.com/0/public/Trades?pair=${encodeURIComponent(base)}${currency.toUpperCase()}&count=1`, 0);
         if (!Array.isArray(data.error) || data.error.length || !data.result) throw new Error('Exchange product unavailable');
         const entry = Object.entries(data.result).find(([key, value]) => key !== 'last' && Array.isArray(value));
         const trades = entry?.[1] || [];
         const trade = trades.reduce((latest, current) => Number(current[2]) > Number(latest?.[2] || 0) ? current : latest, null);
         if (!trade) throw new Error('No exchange trades');
-        return this.validate({ symbol, price: trade[0], tradedAt: Number(trade[2]) * 1000, fetchedAt,
+        return this.validate({ symbol, currency: currency.toUpperCase(), price: trade[0], tradedAt: Number(trade[2]) * 1000, fetchedAt,
             source: 'Kraken', sourceLabel: 'Kraken', url: `https://www.kraken.com/prices/${symbol.toLowerCase()}` });
     }
-    async get(query) {
+    async get(query, { currency = 'usd' } = {}) {
+        if (!['usd', 'usdt'].includes(currency)) throw new Error('Unsupported quote currency');
         const symbol = resolveSymbol(query);
         if (!symbol) throw Object.assign(new Error('Use a ticker such as BTC, ETH, SOL or SUI.'), { code: 'LIVE_UNAVAILABLE' });
         let stale = false;
         for (const provider of ['coinbase', 'kraken']) {
-            try { return await this[provider](symbol); }
+            try { return await this[provider](symbol, currency); }
             catch (error) { stale ||= error.code === 'STALE_QUOTE'; }
         }
         throw Object.assign(new Error(`No fresh ${symbol} quote available. Try again shortly.`), { code: stale ? 'STALE_QUOTE' : 'LIVE_UNAVAILABLE' });

@@ -18,7 +18,7 @@ test('a successful current quote cannot be replaced with an offer to fetch CoinG
 });
 test('unsupported price refusal gets one bounded AI tool-selection correction, not keyword execution', async () => {
     let calls = 0; const f = setup([text(bad), tool(), text('BTC is $12,345 from CoinGecko')], async intent => { assert.equal(intent.command, 'price'); calls++; return { quote }; });
-    await f.agent.respond('Current BTC price please'); assert.equal(calls, 1); assert.equal(f.requests(), 3);
+    await f.agent.respond('Current BTC price please'); assert.equal(calls, 1); assert.equal(f.requests(), 2);
 });
 test('a refusing model cannot create an unbounded correction loop or automatic tool execution', async () => {
     let calls = 0; const f = setup([text(bad), text(bad)], async () => { calls++; });

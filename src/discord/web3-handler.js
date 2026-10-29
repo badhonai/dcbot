@@ -94,7 +94,7 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                         case 'help': result = HELP; break;
                         case 'ask': result = knowledge.ask(option('project'), option('question')); break;
                         case 'official': result = knowledge.official(option('project')); break;
-                        case 'price': result = await market.price(option('token'), { mode: option('mode') || 'live' }); break;
+                        case 'price': result = await market.price(option('token'), { mode: option('mode') || 'live', currency: option('currency') || 'usdt' }); break;
                         case 'pair': result = await market.pair(option('chain'), option('address')); break;
                         case 'newpairs': result = await market.newpairs(option('chain')); break;
                         case 'explain': result = explain(option('term')); break;

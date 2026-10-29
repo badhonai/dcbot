@@ -50,7 +50,7 @@ test('current date/time uses explicit timezone and rejects invalid zones', () =>
 });
 function cg(entry = { usd: 100, last_updated_at: (NOW - 60000) / 1000 }) {
     const urls = [];
-    const quotes = new CoinGeckoQuotes({ get: async (url, ttl) => { urls.push({ url, ttl }); return { data: { bitcoin: entry }, fetchedAt: new Date(NOW).toISOString() }; } }, { now: () => NOW });
+    const quotes = new CoinGeckoQuotes({ get: async (url, ttl) => { urls.push({ url, ttl }); return { data: { bitcoin: entry, tether: { usd: 1, last_updated_at: NOW / 1000 } }, fetchedAt: new Date(NOW).toISOString() }; } }, { now: () => NOW });
     return { quotes, urls };
 }
 test('CoinGecko price requests include update time and bypass bot cache on every refresh', async () => {

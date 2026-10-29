@@ -49,7 +49,7 @@ test('price defaults to a fresh short card and exposes authoritative quote data'
     const { quotes } = live(); const market = new MarketService({}, { liveQuotes: quotes });
     const result = await market.price('BTC');
     assert.equal(result.quote.symbol, 'BTC'); assert.equal(result.pages.length, 1);
-    assert.equal(result.pages[0].description, '**$80,532.63**'); assert.ok(!result.pages[0].fields);
+    assert.equal(result.pages[0].description, '**80,532.63 USDT**'); assert.ok(!result.pages[0].fields);
 });
 test('failed live pricing returns a notice, not fabricated or delayed values', async () => {
     const market = new MarketService({}, { liveQuotes: live({ ...fresh, time: '2026-01-01' }).quotes });

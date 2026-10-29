@@ -22,7 +22,7 @@ async function checkPrice(api, { key = '', now = Date.now } = {}) {
     const checkedAt = new Date(now()).toISOString();
     try {
         const quote = await new CoinGeckoQuotes(api, { now }).get('BTC');
-        return { status: 'ok', auth: key ? 'demo-key' : 'keyless', checkedAt, source: 'CoinGecko', quoteAgeSeconds: quote.ageSeconds, freshnessValidated: true };
+        return { status: 'ok', auth: key ? 'demo-key' : 'keyless', checkedAt, source: 'CoinGecko', currency: quote.currency, basis: quote.derived ? 'derived_cross_rate' : 'usd_aggregate', quoteAgeSeconds: quote.ageSeconds, freshnessValidated: true };
     } catch (error) { return { ...failure(error), auth: key ? 'demo-key' : 'keyless', checkedAt }; }
 }
 async function checkAi(client, { now = Date.now } = {}) {
@@ -34,4 +34,18 @@ async function checkAi(client, { now = Date.now } = {}) {
         return { status: 'ok', checkedAt };
     } catch (error) { return { ...failure(error), checkedAt }; }
 }
-module.exports = { readDemoKey, failure, checkPrice, checkAi };
+async function checkAgentPrice(client, actions, config, { now = Date.now } = {}) {
+    const checkedAt = new Date(now()).toISOString();
+    if (!client) return { status: 'not_configured', checkedAt };
+    let attempted = false; let quote;
+    try {
+        const { createAgent } = require('../ai/agent');
+        const agent = createAgent({ client, actions, config, now, logger: { debug() {} } });
+        const answer = await agent.respond('What is the current BTC price in USDT? Fetch a fresh quote.', { sessionKey: 'diagnostic-price', signal: AbortSignal.timeout(25000), onTool: (intent, output) => { if (intent.command === 'price') { attempted = true; quote = output?.quote; } } });
+        if (!attempted) return { status: 'error', reason: 'agent_did_not_call_price', checkedAt };
+        if (!quote) return { status: 'error', reason: 'price_tool_failed', toolUsed: true, checkedAt };
+        if (quote.currency !== 'USDT' || !answer.includes('BTC/USDT')) return { status: 'error', reason: 'wrong_quote_currency_or_answer', toolUsed: true, checkedAt };
+        return { status: 'ok', toolUsed: true, currency: 'USDT', checkedAt };
+    } catch (error) { return { ...failure(error), toolUsed: attempted, checkedAt }; }
+}
+module.exports = { readDemoKey, failure, checkPrice, checkAi, checkAgentPrice };

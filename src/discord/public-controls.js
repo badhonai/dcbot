@@ -1,7 +1,7 @@
 const { randomBytes } = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
-const { money } = require('../features/market');
+const { quoteMoney } = require('../features/market');
 const { splitMessage } = require('../utils/split-message');
 const safeMentions = { parse: [], repliedUser: false };
 class PublicControls {
@@ -46,7 +46,7 @@ class PublicControls {
                     const result = await this.actions.execute(intent, { signal: state.abort.signal });
                     if (result.quote) {
                         const q = result.quote;
-                        lines.push(`${q.symbol}: **${money(q.price)}** · ${q.sourceLabel || q.source} · ${q.kind === 'aggregate' ? 'updated' : 'trade'} ${q.ageSeconds}s ago`);
+                        lines.push(`${q.symbol}${q.currency ? '/' + q.currency : ''}: **${quoteMoney(q)}** · ${q.sourceLabel || q.source} · ${q.kind === 'aggregate' ? 'updated' : 'trade'} ${q.ageSeconds}s ago`);
                     } else {
                         const page = result.pages?.[0];
                         lines.push([page?.title, page?.description, page?.footer?.text].filter(Boolean).join(' · ') || 'Recent price unavailable. Try again shortly.');

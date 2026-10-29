@@ -10,6 +10,7 @@ const money = value => value == null || value === '' || !Number.isFinite(Number(
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 8 }).format(Number(value));
 const compactMoney = value => value == null || value === '' || !Number.isFinite(Number(value)) ? 'N/A' :
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(Number(value));
+const quoteMoney = quote => quote.currency === 'USDT' ? `${new Intl.NumberFormat('en-US', { maximumSignificantDigits: 8 }).format(quote.price)} USDT` : money(quote.price);
 const percent = value => value == null || value === '' || !Number.isFinite(Number(value)) ? 'N/A' : `${Number(value) > 0 ? '+' : ''}${Number(value).toFixed(2)}%`;
 const field = (name, value) => ({ name, value, inline: true });
 function chainIds(chain) {
@@ -23,11 +24,11 @@ function addressFor(chain, address) {
 }
 class MarketService {
     constructor(api, { liveQuotes = new CoinGeckoQuotes(api) } = {}) { this.api = api; this.liveQuotes = liveQuotes; this.exchangeQuotes = new LiveQuotes(api); }
-    async price(query, { mode = 'live' } = {}) {
+    async price(query, { mode = 'live', currency = 'usdt' } = {}) {
         if (['live', 'coingecko', 'exchange'].includes(mode)) {
             try {
-                const quote = await (mode === 'exchange' ? this.exchangeQuotes : mode === 'coingecko' ? new CoinGeckoQuotes(this.api) : this.liveQuotes).get(query);
-                return { ...pages(card(`${quote.symbol} · USD`, `**${money(quote.price)}**`, {
+                const quote = await (mode === 'exchange' ? this.exchangeQuotes : mode === 'coingecko' ? new CoinGeckoQuotes(this.api) : this.liveQuotes).get(query, { currency });
+                return { ...pages(card(`${quote.symbol}/${quote.currency || 'USD'}`, `**${quoteMoney(quote)}**`, {
                     url: quote.url, footer: `${quote.sourceLabel || quote.source} · ${quote.kind === 'aggregate' ? 'Updated' : 'Trade'} ${quote.ageSeconds}s ago${quote.kind === 'aggregate' ? ' · Free API ~60s updates' : ''} · Fetched`, timestamp: quote.fetchedAt,
                 })), quote };
             } catch (error) {
@@ -87,4 +88,4 @@ class MarketService {
         return pages(cards);
     }
 }
-module.exports = { MarketService, money, compactMoney, chainIds, addressFor };
+module.exports = { MarketService, quoteMoney, money, compactMoney, chainIds, addressFor };

@@ -18,7 +18,7 @@ const { PrivateReplies } = require('./discord/private-replies');
 const { createWeb3Handler } = require('./discord/web3-handler');
 const { commands } = require('./discord/commands');
 const { GuildCommandSync } = require('./discord/command-sync');
-const { readDemoKey, checkPrice, checkAi } = require('./diagnostics/checks');
+const { readDemoKey, checkPrice, checkAi, checkAgentPrice } = require('./diagnostics/checks');
 const { healthPort, createHealthServer } = require('./diagnostics/health-server');
 const { createLogger, errorDetails } = require('./utils/logger');
 const log = createLogger('app');
@@ -42,7 +42,7 @@ async function main() {
     const actions = new Actions({ market, knowledge, web });
     const controls = new PublicControls({ preferences, actions, boundaries, logger: log.child('controls') });
     const modelClient = createModelClient(config, { logger: log.child('ai') });
-    const health = createHealthServer({ checkPrice: () => checkPrice(publicApi, { key: demoKey }), checkAi: () => checkAi(modelClient), discordReady: () => client.isReady(), logger: log.child('health') });
+    const health = createHealthServer({ checkPrice: () => checkPrice(publicApi, { key: demoKey }), checkAi: () => checkAi(modelClient), checkAgentPrice: () => checkAgentPrice(modelClient, actions, config), discordReady: () => client.isReady(), logger: log.child('health') });
     if (process.env.HEALTH_ENABLED !== 'false') {
         const address = await health.start({ port: healthPort(), intervalMinutes: Number(process.env.HEALTH_PROBE_INTERVAL_MINUTES || 0), testAi: process.env.HEALTH_CHECK_AI !== 'false' });
         log.info('Health endpoint ready', { port: address.port, coinGeckoAuth: demoKey ? 'demo-key' : 'keyless', hint: 'GET /diagnostics · No API keys or chat content exposed' });

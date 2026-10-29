@@ -1,10 +1,11 @@
+const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
 const { splitMessage } = require('../utils/split-message');
 const { createLogger, errorDetails } = require('../utils/logger');
 const safeMentions = { parse: [], repliedUser: false };
 function looksLikeRequest(text) {
-    return /^(?:don't|do not)\s+(?:reply|respond|message|talk)\b/i.test(text) || /[?？]|https:\/\//i.test(text) || /^(?:what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help|stop|unsubscribe|mute|pause)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
+    return /^(?:don't|do not)\s+(?:reply|respond|message|talk)\b/i.test(text) || /[?？؟]|https:\/\//i.test(text) || /^(?:what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help|stop|unsubscribe|mute|pause)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
 }
 function createAgentMessageHandler({ client, config, queue, agent, preferences, controls, boundaries, logger = createLogger('chat'), now = Date.now }) {
     const allowed = new Set(config.channels); const cooldowns = new Map();
@@ -23,6 +24,7 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                         reference = replied.content || replied.embeds?.map(embed => [embed.title, embed.description].filter(Boolean).join('\n')).join('\n') || '';
                     } catch { /* Missing references do not manufacture context. */ }
                 }
+                const profile = discordProfile(message.member, message.author);
                 const sessionKey = `${message.channelId}:${message.author.id}`;
                 const followUp = agent.hasSession(sessionKey);
                 if (!addressed && !(config.naturalLanguageCommands !== false && (looksLikeRequest(input) || followUp))) return;
@@ -44,10 +46,10 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                         return decision ? { boundaryReply: decision.reply } : undefined;
                     };
                     if (controls) {
-                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, onProgress, signal, onTool: observe(onTool) }), config.maxResponseLength || 1900);
+                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, profile, onProgress, signal, onTool: observe(onTool) }), config.maxResponseLength || 1900);
                         return;
                     }
-                    const response = await agent.respond(input, { sessionKey, reference, onTool: observe() });
+                    const response = await agent.respond(input, { sessionKey, reference, profile, onTool: observe() });
                     for (const content of splitMessage(response, Math.min(config.maxResponseLength || 1900, 1900))) await replyClean(message, { content, flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
                 } catch (error) {
                     logger.error('Agent request failed', errorDetails(error));

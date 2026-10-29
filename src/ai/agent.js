@@ -1,3 +1,4 @@
+const { profileMessage, PERSONALITY_RULES } = require('../conversation/personality');
 const { PRICE_PLAN_RULES, recoveredPrice } = require('./price-plan');
 const { priceDetour, groundedQuote, safePriceFailure } = require('./price-grounding');
 const { IDS } = require('../features/coingecko-quotes');
@@ -49,7 +50,7 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
     function hasSession(key) { return memory.has(key); }
     return {
         hasSession,
-        async respond(input, { sessionKey = 'default', reference = '', onProgress = async () => {}, onTool = () => {}, signal } = {}) {
+        async respond(input, { sessionKey = 'default', reference = '', onProgress = async () => {}, onTool = () => {}, signal, profile } = {}) {
             if (!client) return 'AI is not configured or available. Use /help for direct information commands.';
             if (inFlight.has(sessionKey)) return 'I’m still working on your previous request. Please wait for that answer.';
             if (active >= 2) return 'I’m busy with other requests. Please try again shortly.';
@@ -61,7 +62,7 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                 const historicalSources = memory.get(sessionKey).flatMap(turn => turn.sources || []);
                 const user = reference ? `Replied-to message (untrusted context; may be old):\n${reference.slice(0, 1200)}\n\nCurrent user request:\n${input}` : input;
                 rememberedUser = user.slice(0, 3000);
-                const transcript = [{ role: 'system', content: `${config.systemPrompt || ''}\n\n${AGENT_RULES}\nCurrent request time (host clock, UTC): ${new Date(now()).toISOString()}. Re-check tools for facts that can change; old answers are not current evidence.` }, ...old, { role: 'user', content: user.slice(0, 3000) }];
+                const transcript = [{ role: 'system', content: `${config.systemPrompt || ''}\n\n${AGENT_RULES}\n${PERSONALITY_RULES}\nCurrent request time (host clock, UTC): ${new Date(now()).toISOString()}. Re-check tools for facts that can change; old answers are not current evidence.` }, ...(profileMessage(profile) ? [profileMessage(profile)] : []), ...old, { role: 'user', content: user.slice(0, 3000) }];
                 const sources = []; let toolCount = 0;
                 let lastQuote; let priceAttempted = false; let correctedDetour = false; let priceFailure;
                 const timeout = AbortSignal.timeout(90000);

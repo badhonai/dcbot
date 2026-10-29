@@ -1,3 +1,4 @@
+const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
 const { createLogger, errorDetails } = require('../utils/logger');
@@ -80,7 +81,7 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                 const execute = async () => {
                     let result;
                     if (interaction.commandName === 'chat') {
-                        result = agent ? await agent.respond(option('message'), { sessionKey: `private:${interaction.channelId}:${interaction.user.id}`, onTool }) : 'AI is not configured. Use /help for direct commands.';
+                        result = agent ? await agent.respond(option('message'), { sessionKey: `private:${interaction.channelId}:${interaction.user.id}`, profile: discordProfile(interaction.member, interaction.user, interaction.locale), onTool }) : 'AI is not configured. Use /help for direct commands.';
                     } else if (interaction.commandName === 'search') {
                         const found = await actions.execute({ command: 'web_search', args: { query: option('query') } });
                         result = found.results.length ? pages(found.results.map(item => card(item.title || 'Search result', clip(item.content, 650), { url: item.url, footer: 'Web search snippet · Read the source for context' }))) : notice('No results', 'Try a different search query.');

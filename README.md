@@ -60,6 +60,14 @@ The **Stop replies to me** confirmation button appears only when the user explic
 
 Each request receives the **current UTC host-clock timestamp** in its trusted context. The `get_time` tool formats current date/time for an explicit IANA timezone such as `Asia/Dhaka`; UTC is the fallback, not an assumed member location. Keep the host clock synchronized. The bot does not call a third-party time service just to obtain the current date.
 
+### Expressive tone and personal conversation boundaries
+
+The AI is instructed to sound warm and expressive with occasional appropriate emoji, without claiming literal human feelings, guilt-tripping users or insulting them. Normal criticism, disagreement, frustration with wrong answers, general profanity, playful teasing, quoted speech, stop requests and apologies must not trigger an abuse report. Uncertain cases should be ignored. Classification uses the AI's contextual tool choice, not a profanity blacklist; like any AI judgment it can make mistakes, so staging review is required.
+
+Only clear personal abuse directed at this bot in the **current** message may invoke `report_direct_abuse`. The application requires an exact excerpt from that user's current input and deduplicates message IDs. It cannot target another user or choose a punishment duration. First incident: a gentle respectful boundary. A second distinct incident within an hour: one explicit warning. Continued abuse on the third incident: a **five-hour conversation pause** for that user across servers. After an hour without another incident, the warning counter resets. The final boundary notice is sent once; further automatic messages and `/chat` are suppressed until the deadline. `/start` cannot bypass it and shows the deadline privately. The timed pause expires automatically, without sending an unsolicited message. Direct informational slash commands remain available; separate manual `/stop` preferences are not undone.
+
+This is **not Discord moderation**: no timeouts, bans, message deletion of users' messages, role changes or member restrictions. Only the bot's own conversation replies are affected. Warning/pause metadata (user/message IDs, counts and UTC deadlines, not raw insults) persists atomically in ignored `data/chat-boundaries.json`; retain `data/` on persistent host storage across redeploys. Expiry uses the host clock.
+
 ### AI-first conversation, not token-name routing
 
 Every supported public conversation request goes through the AI agent. It decides whether to answer, clarify or use read-only tools. A bare `BTC` does **not** trigger a price lookup: tools are disabled for bare single-word turns. Ask `what is Bitcoin?`, `explain BTC mining`, or `what is the live BTC price?` to express your intent. Without an AI key, use direct slash commands; production does not fall back to keyword routing.

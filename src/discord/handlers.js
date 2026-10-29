@@ -8,8 +8,8 @@ const { QueueFullError } = require('../conversation/channel-queue');
 const { money } = require('../features/market');
 const safeMentions = { parse: [], repliedUser: false };
 
-function createHandlers({ client, config, history, queue, ai, router, actions, agent, preferences, controls, logger = createLogger('chat'), now = Date.now }) {
-    if (agent) return createAgentMessageHandler({ client, config, queue, agent, preferences, controls, logger, now });
+function createHandlers({ client, config, history, queue, ai, router, actions, agent, preferences, controls, boundaries, logger = createLogger('chat'), now = Date.now }) {
+    if (agent) return createAgentMessageHandler({ client, config, queue, agent, preferences, controls, boundaries, logger, now });
     // Legacy adapter compatibility only. Production always supplies the AI-first agent.
     const allowed = new Set(config.channels);
     const cooldowns = new Map();

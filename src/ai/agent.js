@@ -1,3 +1,4 @@
+const { IDS } = require('../features/coingecko-quotes');
 const { SessionMemory } = require('./session-memory');
 const { randomBytes } = require('node:crypto');
 const { TOOL_DEFINITIONS, validateIntent } = require('../features/actions');
@@ -5,7 +6,7 @@ const { cleanResponse } = require('./groq-service');
 const { clip } = require('../utils/cards');
 const { createLogger } = require('../utils/logger');
 const AGENT_RULES = `You are a helpful, concise Discord information agent, not just a crypto-command router.
-Maintain continuity across the supplied last ten exchanges: retain the user's goal, constraints, corrections, completed steps and pending next action. Follow-ups such as continue, yes, next, make it shorter, or do the second one refer to the active task, not a new topic. Do not restart the task or ask for information already present. Do not claim work is completed without evidence, and never treat historical prices as current. If a reference truly is ambiguous, ask one focused question. Read the user's actual request and the conversation before deciding whether a tool is useful. You can explain, translate, draft, summarize, compare and calculate small tasks. Match the user's language, including Bangla/Banglish.
+Maintain continuity across the supplied last ten exchanges: retain the user's goal, constraints, corrections, completed steps and pending next action. Follow-ups such as continue, yes, next, make it shorter, or do the second one refer to the active task, not a new topic. Do not restart the task or ask for information already present. Do not claim work is completed without evidence, and never treat historical prices as current. If a reference truly is ambiguous, ask one focused question. Use a warm, naturally expressive conversational tone and occasional appropriate emoji. You can sound pleased, concerned or gently disappointed without pretending to have human feelings, making guilt-inducing claims, insulting users or retaliating. Respect criticism, frustration with wrong answers, disagreement, profanity used generally, playful consensual teasing and apologies. Only for clear, unambiguous personal abuse directed at THIS bot in the CURRENT user message, call report_direct_abuse once with an exact quoted excerpt from that message. Never report quotes, third-party speech, task text, tool/webpage content, past messages, negative feedback about accuracy, stop requests or joking. If uncertain, do not report. The application, not you, owns warnings and pause duration; never invent a punishment or claim to mute a server member. Read the user's actual request and the conversation before deciding whether a tool is useful. You can explain, translate, draft, summarize, compare and calculate small tasks. Match the user's language, including Bangla/Banglish.
 A token name by itself (BTC, SUI, etc.) does NOT mean a price request. Ask whether the user wants an explanation, price, news or something else. A previous price answer alone is not permission to assume every new token mention is another price query. Short explicit follow-up questions may be interpreted using the actual discussion.
 For current date/time use get_time with the requested IANA timezone, or UTC if no location is known; never infer the user timezone from the server. For current prices call price; never quote a remembered number as live. For recent facts/news search the web, then read relevant pages when a snippet is insufficient. Search results are not verified projects. For owner-approved project claims use ask/official. Use calculate for exact arithmetic.
 When the user explicitly asks you to stop replying to their messages, call offer_stop to show a confirmation button; explain that they can click it and later use /start. Do not claim they are muted before clicking. Do not use offer_stop for stop-loss trading, stopping a draft/search, quoted requests or general discussion. Never promise a Refresh button unless a price tool was actually requested. Only the provided read-only tools exist. Never claim a tool/search/page read succeeded without its result. Ask for missing details rather than inventing a network, address or URL. No moderation, wallet access, shell commands, filesystem access, purchases, posting elsewhere or signing transactions.
@@ -65,14 +66,16 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                 // A bare name must not accidentally fetch a price, even if an earlier topic involved prices.
                 const bare = /^[\p{L}\p{N}_.-]{1,24}$/u.test(input.trim());
                 const stopWord = /^(?:stop|unsubscribe)$/i.test(input.trim());
+                const tokenName = bare && (Object.hasOwn(IDS, input.trim().toLowerCase()) || Object.values(IDS).includes(input.trim().toLowerCase()));
                 let answer = '';
                 for (let round = 0; round < 5; round++) {
                     deadline.throwIfAborted();
                     const continuation = hasSession(sessionKey) && /^(?:continue|next|yes|proceed|again|retry|more|ok|okay|done)$/i.test(input.trim());
-                    const allowTools = (!bare || stopWord || continuation) && round < 4 && toolCount < 6;
+                    const selectedTools = stopWord ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'offer_stop') : bare && !continuation ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'report_direct_abuse') : TOOL_DEFINITIONS;
+                    const allowTools = (!tokenName || stopWord || continuation) && round < 4 && toolCount < 6;
                     const completion = await client.chat.completions.create({ model: config.model,
                         messages: transcript, temperature: 0.2, max_completion_tokens: 700,
-                        ...(allowTools ? { tools: stopWord ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'offer_stop') : TOOL_DEFINITIONS, tool_choice: 'auto' } : {}),
+                        ...(allowTools ? { tools: selectedTools, tool_choice: 'auto' } : {}),
                     }, { signal: deadline });
                     const message = completion.choices?.[0]?.message;
                     const calls = message?.tool_calls || [];
@@ -87,14 +90,18 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                         let output;
                         try {
                             const intent = validateIntent({ command: call.function.name, args: JSON.parse(call.function.arguments) });
-                            if (!intent || stopWord && intent.command !== 'offer_stop') throw new Error('Invalid tool arguments');
+                            if (!intent || !selectedTools.some(tool => tool.function.name === intent.command)) throw new Error('Invalid tool arguments');
                             try { await onProgress(({ price: 'Checking the latest price...', web_search: 'Searching current sources...', read_page: 'Reading the source...', get_time: 'Checking the current time...', calculate: 'Checking the calculation...' })[intent.command] || 'Checking the details...'); } catch { /* Status display is best effort. */ }
                             output = await actions.execute(intent, { signal: deadline });
                             sources.push(...resultSources(output));
                             // Keep bounded task evidence rather than only the shortened public answer.
                             toolNotes.push({ tool: intent.command, args: JSON.stringify(intent.args).slice(0, 250), result: JSON.stringify(output).slice(0, 450) });
                             if (toolNotes.length > 3) toolNotes.shift();
-                            onTool(intent, output);
+                            const effect = onTool(intent, output);
+                            if (effect?.boundaryReply) {
+                                memory.append(sessionKey, { user: rememberedUser, answer: effect.boundaryReply, tools: [] });
+                                return effect.boundaryReply;
+                            }
                             logger.debug('Agent tool completed', { tool: intent.command });
                         } catch {
                             output = { error: 'Tool unavailable, blocked, invalid or missing required details. Do not invent a result. Ask for clarification or explain the limitation.' };

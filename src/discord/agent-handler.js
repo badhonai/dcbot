@@ -6,13 +6,13 @@ const safeMentions = { parse: [], repliedUser: false };
 function looksLikeRequest(text) {
     return /^(?:don't|do not)\s+(?:reply|respond|message|talk)\b/i.test(text) || /[?？]|https:\/\//i.test(text) || /^(?:what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help|stop|unsubscribe|mute|pause)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
 }
-function createAgentMessageHandler({ client, config, queue, agent, preferences, controls, logger = createLogger('chat'), now = Date.now }) {
+function createAgentMessageHandler({ client, config, queue, agent, preferences, controls, boundaries, logger = createLogger('chat'), now = Date.now }) {
     const allowed = new Set(config.channels); const cooldowns = new Map();
     return { async onMessage(message) {
-        if (preferences?.isMuted(message.author.id) || message.author.bot || !allowed.has(message.channelId)) return;
+        if (boundaries?.pausedUntil(message.author.id) || preferences?.isMuted(message.author.id) || message.author.bot || !allowed.has(message.channelId)) return;
         try {
             await queue.run(message.channelId, async () => {
-                if (preferences?.isMuted(message.author.id)) return;
+                if (boundaries?.pausedUntil(message.author.id) || preferences?.isMuted(message.author.id)) return;
                 const input = message.content.replace(/<@!?\d+>/g, '').trim();
                 if (!input) return;
                 let addressed = message.mentions.has(client.user); let reference = '';
@@ -37,15 +37,21 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                 try {
                     await message.channel.sendTyping();
                     timer = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000); timer.unref?.();
+                    const observe = onTool => (intent, output) => {
+                        if (intent.command !== 'report_direct_abuse' || !boundaries || !message.id) { onTool?.(intent, output); return; }
+                        const decision = boundaries.record(message.author.id, message.id, input, intent.args.evidence);
+                        onTool?.(intent, { ...output, boundaryNotice: decision?.paused ? decision.reply : undefined });
+                        return decision ? { boundaryReply: decision.reply } : undefined;
+                    };
                     if (controls) {
-                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, onProgress, signal, onTool }), config.maxResponseLength || 1900);
+                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, onProgress, signal, onTool: observe(onTool) }), config.maxResponseLength || 1900);
                         return;
                     }
-                    const response = await agent.respond(input, { sessionKey, reference });
+                    const response = await agent.respond(input, { sessionKey, reference, onTool: observe() });
                     for (const content of splitMessage(response, Math.min(config.maxResponseLength || 1900, 1900))) await replyClean(message, { content, flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
                 } catch (error) {
                     logger.error('Agent request failed', errorDetails(error));
-                    if (preferences?.isMuted(message.author.id)) return;
+                    if (boundaries?.pausedUntil(message.author.id) || preferences?.isMuted(message.author.id)) return;
                     await replyClean(message, { content: 'I couldn’t finish that request right now. Please try again shortly.', flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
                 } finally { clearInterval(timer); }
             });

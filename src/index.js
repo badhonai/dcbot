@@ -11,6 +11,7 @@ const { createHandlers } = require('./discord/handlers');
 const { PublicApi } = require('./integrations/public-api');
 const { MarketService } = require('./features/market');
 const { KnowledgeService } = require('./features/knowledge');
+const { ChatBoundaries } = require('./preferences/chat-boundaries');
 const { ReplyPreferences } = require('./preferences/reply-preferences');
 const { PublicControls } = require('./discord/public-controls');
 const { PrivateReplies } = require('./discord/private-replies');
@@ -30,15 +31,16 @@ async function main() {
     const commandSync = new GuildCommandSync({ rest: client.rest, commands, logger: log.child('command-sync') });
     const queue = new ChannelQueue(config.maxPendingPerChannel);
     const preferences = new ReplyPreferences(path.resolve(__dirname, '../data/reply-preferences.json'));
+    const boundaries = new ChatBoundaries(path.resolve(__dirname, '../data/chat-boundaries.json'));
     const replies = new PrivateReplies({ preferences });
     const market = new MarketService(new PublicApi({ logger: log.child('market-api'), coingeckoApiKey: process.env.COINGECKO_DEMO_API_KEY }));
     const web = new WebService({ apiKey: config.ollamaApiKey });
     const actions = new Actions({ market, knowledge, web });
-    const controls = new PublicControls({ preferences, actions, logger: log.child('controls') });
+    const controls = new PublicControls({ preferences, actions, boundaries, logger: log.child('controls') });
     const modelClient = createModelClient(config, { logger: log.child('ai') });
     const agent = createAgent({ client: modelClient, actions, config, logger: log.child('agent') });
-    const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, agent, preferences, controls, logger: log.child('commands') });
-    const handlers = createHandlers({ client, config, queue, agent, preferences, controls, logger: log.child('chat') });
+    const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, agent, preferences, controls, boundaries, logger: log.child('commands') });
+    const handlers = createHandlers({ client, config, queue, agent, preferences, controls, boundaries, logger: log.child('chat') });
     client.once(Events.ClientReady, () => {
         log.info('Connected to Discord', { bot: client.user.tag, guilds: client.guilds.cache.size, slashReplies: 'private' });
         commandSync.syncAll(client.user.id, client.guilds.cache.keys()).catch(error => {

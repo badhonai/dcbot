@@ -18,7 +18,7 @@ const HELP = pages(
         { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Quotes: CoinGecko (free API ~60s updates); exchange mode: Coinbase / Kraken. Other data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
     ] }),
 );
-function createWeb3Handler({ config, market, knowledge, replies, actions, agent, preferences, controls, logger = createLogger('commands') }) {
+function createWeb3Handler({ config, market, knowledge, replies, actions, agent, preferences, controls, boundaries, logger = createLogger('commands') }) {
     const cooldowns = new Map(); let active = 0;
     return async function onInteraction(interaction) {
         try {
@@ -43,11 +43,17 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             if (['start', 'stop'].includes(interaction.commandName)) {
                 if (!preferences) throw new Error('Preferences unavailable');
+                if (interaction.commandName === 'start' && boundaries?.pausedUntil(interaction.user.id)) {
+                    await replies.send(interaction, `Our conversation is paused until <t:${Math.floor(boundaries.pausedUntil(interaction.user.id) / 1000)}:f>. It will resume automatically after the 5-hour pause.`); return;
+                }
                 preferences.setMuted(interaction.user.id, interaction.commandName === 'stop');
                 await replies.send(interaction, interaction.commandName === 'stop' ? 'Automatic replies stopped for you. Use /start to resume.' : 'Automatic replies are on again for you.'); return;
             }
             if (!config.channels.includes(interaction.channelId)) {
                 await replies.send(interaction, notice('Use a bot channel', 'Commands are enabled in the configured channels only.')); return;
+            }
+            if (interaction.commandName === 'chat' && boundaries?.pausedUntil(interaction.user.id)) {
+                await replies.send(interaction, `Our conversation is paused until <t:${Math.floor(boundaries.pausedUntil(interaction.user.id) / 1000)}:f>. Please try again after that.`); return;
             }
             const now = Date.now(); const user = interaction.user.id;
             if ((cooldowns.get(user) || 0) > now || active >= 3) {
@@ -61,8 +67,13 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
             const started = Date.now();
             try {
                 const option = name => interaction.options.getString(name);
-                const priceIntents = new Map(); let showStop = false;
+                const priceIntents = new Map(); let showStop = false; let boundaryNotice;
                 const onTool = (intent, output) => {
+                    if (intent.command === 'report_direct_abuse' && boundaries && interaction.id) {
+                        const decision = boundaries.record(interaction.user.id, interaction.id, option('message') || '', intent.args.evidence);
+                        if (decision?.paused) boundaryNotice = decision.reply;
+                        return decision ? { boundaryReply: decision.reply } : undefined;
+                    }
                     if (intent.command === 'price') priceIntents.set(JSON.stringify(intent.args), intent);
                     if (intent.command === 'offer_stop' && output?.confirmationRequired) showStop = true;
                 };
@@ -90,7 +101,8 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                     }
                     return result;
                 };
-                const result = await execute();
+                let result = await execute();
+                if (interaction.commandName === 'chat' && boundaries?.pausedUntil(interaction.user.id) && result !== boundaryNotice) result = 'Our conversation is paused for 5 hours. Please try again after the pause ends.';
                 const refresh = interaction.commandName === 'price' ? execute : priceIntents.size ? async () => {
                     const results = [];
                     for (const intent of priceIntents.values()) results.push(...(await actions.execute(intent)).pages);

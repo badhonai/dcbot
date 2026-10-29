@@ -5,13 +5,14 @@ const { money } = require('../features/market');
 const { splitMessage } = require('../utils/split-message');
 const safeMentions = { parse: [], repliedUser: false };
 class PublicControls {
-    constructor({ preferences, actions, now = Date.now, logger = { warn() {} } }) {
-        this.preferences = preferences; this.actions = actions; this.now = now; this.logger = logger; this.sessions = new Map(); this.cooldowns = new Map();
+    constructor({ preferences, actions, boundaries, now = Date.now, logger = { warn() {} } }) {
+        this.preferences = preferences; this.actions = actions; this.boundaries = boundaries; this.now = now; this.logger = logger; this.sessions = new Map(); this.cooldowns = new Map();
         preferences.on?.('change', (owner, muted) => {
             if (muted) for (const state of this.sessions.values()) if (state.owner === owner) state.abort?.abort();
         });
     }
     components(id, state) {
+        if (this.boundaries?.pausedUntil(state.owner)) return [];
         const buttons = [];
         if (state.prices?.size) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:refresh`).setLabel('Refresh price').setStyle(ButtonStyle.Secondary).setDisabled(state.busy));
         if (state.stopRequested) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:stop`).setLabel('Stop replies to me').setStyle(ButtonStyle.Secondary));
@@ -19,7 +20,7 @@ class PublicControls {
     }
     async run(message, task, maxLength = 1900) {
         const owner = message.author.id;
-        if (this.preferences.isMuted(owner)) return;
+        if (this.preferences.isMuted(owner) || this.boundaries?.pausedUntil(owner)) return;
         for (const [key, state] of this.sessions) if (state.expires <= this.now()) this.sessions.delete(key);
         if (this.sessions.size >= 200) this.sessions.delete(this.sessions.keys().next().value);
         const id = randomBytes(12).toString('hex');
@@ -33,7 +34,7 @@ class PublicControls {
     async execute(id, state, refreshing = false) {
         const revision = this.preferences.revision(state.owner);
         state.abort = new AbortController();
-        const valid = () => !this.preferences.isMuted(state.owner) && revision === this.preferences.revision(state.owner);
+        const valid = () => !this.preferences.isMuted(state.owner) && revision === this.preferences.revision(state.owner) && (!this.boundaries?.pausedUntil(state.owner) || Boolean(state.boundaryNotice && text === state.boundaryNotice));
         const edit = payload => state.messages[0].edit(cleanDiscordPayload({ ...payload, flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
         let text;
         try {
@@ -56,6 +57,7 @@ class PublicControls {
                 text = await state.task(async content => {
                     if (valid()) await edit({ content, components: this.components(id, state) });
                 }, state.abort.signal, (intent, output) => {
+                    if (intent.command === 'report_direct_abuse' && output?.boundaryNotice) state.boundaryNotice = output.boundaryNotice;
                     if (intent.command === 'price') state.prices.set(JSON.stringify(intent.args), intent);
                     if (intent.command === 'offer_stop' && output?.confirmationRequired) state.stopRequested = true;
                 });
@@ -64,6 +66,10 @@ class PublicControls {
             text = 'I couldn’t verify that right now. Please try again shortly.';
         } finally { state.busy = false; }
         if (!valid()) {
+            if (this.boundaries?.pausedUntil(state.owner)) {
+                for (const sent of state.messages) await sent.delete().catch(() => {});
+                return;
+            }
             await edit({ content: 'Request stopped. Use /start to enable automatic replies again.', components: [] }); return;
         }
         const chunks = splitMessage(text || 'No answer available.', Math.min(state.maxLength, 1900));
@@ -87,6 +93,9 @@ class PublicControls {
             await interaction.editReply(cleanDiscordPayload({ content: 'Automatic replies stopped for you. Use /start to turn them back on.' }));
             await state.messages[0]?.edit(cleanDiscordPayload({ ...(state.busy ? { content: 'Request stopped. Use /start to resume.' } : {}), components: [] }))?.catch(() => {});
             return;
+        }
+        if (this.boundaries?.pausedUntil(state.owner)) {
+            await replyClean(interaction, { content: 'Our conversation is paused for 5 hours. Please try after the pause ends.', flags: MessageFlags.Ephemeral }); return;
         }
         if (this.preferences.isMuted(state.owner) || state.busy || (this.cooldowns.get(state.owner) || 0) > this.now()) {
             await replyClean(interaction, { content: this.preferences.isMuted(state.owner) ? 'Replies are stopped. Use /start to resume.' : 'Already checking, or on cooldown. Try again shortly.', flags: MessageFlags.Ephemeral }); return;

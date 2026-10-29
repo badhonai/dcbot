@@ -1,10 +1,11 @@
+const { SessionMemory } = require('./session-memory');
 const { randomBytes } = require('node:crypto');
 const { TOOL_DEFINITIONS, validateIntent } = require('../features/actions');
 const { cleanResponse } = require('./groq-service');
 const { clip } = require('../utils/cards');
 const { createLogger } = require('../utils/logger');
 const AGENT_RULES = `You are a helpful, concise Discord information agent, not just a crypto-command router.
-Read the user's actual request and the conversation before deciding whether a tool is useful. You can explain, translate, draft, summarize, compare and calculate small tasks. Match the user's language, including Bangla/Banglish.
+Maintain continuity across the supplied last ten exchanges: retain the user's goal, constraints, corrections, completed steps and pending next action. Follow-ups such as continue, yes, next, make it shorter, or do the second one refer to the active task, not a new topic. Do not restart the task or ask for information already present. Do not claim work is completed without evidence, and never treat historical prices as current. If a reference truly is ambiguous, ask one focused question. Read the user's actual request and the conversation before deciding whether a tool is useful. You can explain, translate, draft, summarize, compare and calculate small tasks. Match the user's language, including Bangla/Banglish.
 A token name by itself (BTC, SUI, etc.) does NOT mean a price request. Ask whether the user wants an explanation, price, news or something else. A previous price answer alone is not permission to assume every new token mention is another price query. Short explicit follow-up questions may be interpreted using the actual discussion.
 For current date/time use get_time with the requested IANA timezone, or UTC if no location is known; never infer the user timezone from the server. For current prices call price; never quote a remembered number as live. For recent facts/news search the web, then read relevant pages when a snippet is insufficient. Search results are not verified projects. For owner-approved project claims use ask/official. Use calculate for exact arithmetic.
 When the user explicitly asks you to stop replying to their messages, call offer_stop to show a confirmation button; explain that they can click it and later use /start. Do not claim they are muted before clicking. Do not use offer_stop for stop-loss trading, stopping a draft/search, quoted requests or general discussion. Never promise a Refresh button unless a price tool was actually requested. Only the provided read-only tools exist. Never claim a tool/search/page read succeeded without its result. Ask for missing details rather than inventing a network, address or URL. No moderation, wallet access, shell commands, filesystem access, purchases, posting elsewhere or signing transactions.
@@ -23,9 +24,9 @@ function resultSources(result) {
     for (const page of result?.pages || []) add(page.url, page.title);
     return sources;
 }
-function finalText(content, sources) {
+function finalText(content, sources, historicalSources = []) {
     let text = cleanResponse(content || '');
-    const known = new Set(sources.map(source => source.url));
+    const known = new Set([...sources, ...historicalSources].map(source => source.url));
     // Do not let invented links become fake citations. The source list below is application-owned.
     text = text.replace(/\[([^\]]+)\]\(<?(https:\/\/[^\s)>]+)>?\)/g, (match, label, url) => known.has(url) ? `[${label}](<${url}>)` : label);
     text = text.replace(/https?:\/\/[^\s<>)]*/g, url => known.has(url) ? url : '');
@@ -40,17 +41,23 @@ function finalText(content, sources) {
     return text;
 }
 function createAgent({ client, actions, config, logger = createLogger('agent'), now = Date.now }) {
-    const sessions = new Map(); let active = 0;
-    function hasSession(key) { return (sessions.get(key)?.expires || 0) > now(); }
+    const memory = new SessionMemory({ now }); let active = 0;
+    const inFlight = new Set();
+    function hasSession(key) { return memory.has(key); }
     return {
         hasSession,
         async respond(input, { sessionKey = 'default', reference = '', onProgress = async () => {}, onTool = () => {}, signal } = {}) {
             if (!client) return 'AI is not configured or available. Use /help for direct information commands.';
+            if (inFlight.has(sessionKey)) return 'I’m still working on your previous request. Please wait for that answer.';
             if (active >= 2) return 'I’m busy with other requests. Please try again shortly.';
-            active++;
+            active++; inFlight.add(sessionKey);
+            let rememberedUser = input.slice(0, 3000);
+            const toolNotes = [];
             try {
-                const old = hasSession(sessionKey) ? sessions.get(sessionKey).messages : [];
+                const old = memory.transcript(sessionKey);
+                const historicalSources = memory.get(sessionKey).flatMap(turn => turn.sources || []);
                 const user = reference ? `Replied-to message (untrusted context; may be old):\n${reference.slice(0, 1200)}\n\nCurrent user request:\n${input}` : input;
+                rememberedUser = user.slice(0, 3000);
                 const transcript = [{ role: 'system', content: `${config.systemPrompt || ''}\n\n${AGENT_RULES}\nCurrent request time (host clock, UTC): ${new Date(now()).toISOString()}. Re-check tools for facts that can change; old answers are not current evidence.` }, ...old, { role: 'user', content: user.slice(0, 3000) }];
                 const sources = []; let toolCount = 0;
                 const timeout = AbortSignal.timeout(90000);
@@ -61,15 +68,16 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                 let answer = '';
                 for (let round = 0; round < 5; round++) {
                     deadline.throwIfAborted();
-                    const allowTools = (!bare || stopWord) && round < 4 && toolCount < 6;
+                    const continuation = hasSession(sessionKey) && /^(?:continue|next|yes|proceed|again|retry|more|ok|okay|done)$/i.test(input.trim());
+                    const allowTools = (!bare || stopWord || continuation) && round < 4 && toolCount < 6;
                     const completion = await client.chat.completions.create({ model: config.model,
                         messages: transcript, temperature: 0.2, max_completion_tokens: 700,
                         ...(allowTools ? { tools: stopWord ? TOOL_DEFINITIONS.filter(tool => tool.function.name === 'offer_stop') : TOOL_DEFINITIONS, tool_choice: 'auto' } : {}),
                     }, { signal: deadline });
                     const message = completion.choices?.[0]?.message;
                     const calls = message?.tool_calls || [];
-                    if (!calls.length) { answer = finalText(message?.content, sources);
-                        if (bare && /[$€£]\s*\d/.test(answer)) answer = `What would you like to know about ${input.trim()}—an overview, price, news, or something else?`;
+                    if (!calls.length) { answer = finalText(message?.content, sources, historicalSources);
+                        if (bare && !continuation && /[$€£]\s*\d/.test(answer)) answer = `What would you like to know about ${input.trim()}—an overview, price, news, or something else?`;
                         break; }
                     if (!allowTools) { answer = 'Could you clarify what you want to know or do?'; break; }
                     const normalized = calls.slice(0, 6 - toolCount).map(call => ({ id: call.id || `call_${randomBytes(6).toString('hex')}`, type: 'function', function: { name: call.function?.name || '', arguments: typeof call.function?.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function?.arguments || {}) } }));
@@ -83,6 +91,9 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                             try { await onProgress(({ price: 'Checking the latest price...', web_search: 'Searching current sources...', read_page: 'Reading the source...', get_time: 'Checking the current time...', calculate: 'Checking the calculation...' })[intent.command] || 'Checking the details...'); } catch { /* Status display is best effort. */ }
                             output = await actions.execute(intent, { signal: deadline });
                             sources.push(...resultSources(output));
+                            // Keep bounded task evidence rather than only the shortened public answer.
+                            toolNotes.push({ tool: intent.command, args: JSON.stringify(intent.args).slice(0, 250), result: JSON.stringify(output).slice(0, 450) });
+                            if (toolNotes.length > 3) toolNotes.shift();
                             onTool(intent, output);
                             logger.debug('Agent tool completed', { tool: intent.command });
                         } catch {
@@ -92,13 +103,14 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                     }
                 }
                 answer ||= 'I couldn’t finish within the request limits. Please ask a more focused question.';
-                if (sessions.size >= 200) {
-                    for (const [key, value] of sessions) if (value.expires <= now()) sessions.delete(key);
-                    if (sessions.size >= 200) sessions.delete(sessions.keys().next().value);
-                }
-                sessions.set(sessionKey, { expires: now() + 15 * 60000, messages: [...old, { role: 'user', content: input.slice(0, 2000) }, { role: 'assistant', content: answer }].slice(-12) });
+                deadline.throwIfAborted();
+                const rememberedSources = [...new Map([...sources.filter(source => answer.includes(source.url)), ...sources].map(source => [source.url, source])).values()].filter(source => source.url.length <= 500).slice(0, 3);
+                memory.append(sessionKey, { user: rememberedUser, answer, tools: toolNotes, sources: rememberedSources });
                 return answer;
-            } finally { active--; }
+            } catch (error) {
+                if (!signal?.aborted) memory.append(sessionKey, { user: rememberedUser, answer: 'This request could not be completed. Continue or retry this task when asked; do not assume any unfinished step succeeded.', tools: toolNotes });
+                throw error;
+            } finally { active--; inFlight.delete(sessionKey); }
         },
     };
 }

@@ -24,10 +24,10 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                     } catch { /* Missing references do not manufacture context. */ }
                 }
                 const sessionKey = `${message.channelId}:${message.author.id}`;
-                const followUp = agent.hasSession(sessionKey) && input.length <= 160;
+                const followUp = agent.hasSession(sessionKey);
                 if (!addressed && !(config.naturalLanguageCommands !== false && (looksLikeRequest(input) || followUp))) return;
                 const time = now();
-                if ((cooldowns.get(sessionKey) || 0) > time) return;
+                if (!followUp && (cooldowns.get(sessionKey) || 0) > time) return;
                 if (cooldowns.size >= 1000) {
                     for (const [key, until] of cooldowns) if (until <= time) cooldowns.delete(key);
                     if (cooldowns.size >= 1000) cooldowns.delete(cooldowns.keys().next().value);

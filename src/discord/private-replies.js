@@ -14,8 +14,8 @@ class PrivateReplies {
             new ButtonBuilder().setCustomId(`private:${id}:previous`).setLabel('Back').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
             new ButtonBuilder().setCustomId(`private:${id}:next`).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(page === count - 1),
         );
-        if (session.refresh) buttons.push(new ButtonBuilder().setCustomId(`private:${id}:refresh`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setDisabled(Boolean(session.refreshing)));
-        if (this.preferences) buttons.push(new ButtonBuilder().setCustomId(`private:${id}:stop`).setLabel(this.preferences.isMuted(session.owner) ? 'Replies stopped' : 'Stop replies to me').setStyle(ButtonStyle.Secondary).setDisabled(this.preferences.isMuted(session.owner)));
+        if (session.refresh) buttons.push(new ButtonBuilder().setCustomId(`private:${id}:refresh`).setLabel('Refresh price').setStyle(ButtonStyle.Secondary).setDisabled(Boolean(session.refreshing)));
+        if (this.preferences && session.showStop) buttons.push(new ButtonBuilder().setCustomId(`private:${id}:stop`).setLabel(this.preferences.isMuted(session.owner) ? 'Replies stopped' : 'Stop replies to me').setStyle(ButtonStyle.Secondary).setDisabled(this.preferences.isMuted(session.owner)));
         buttons.push(new ButtonBuilder().setCustomId(`private:${id}:close`).setLabel('Dismiss').setStyle(ButtonStyle.Secondary));
         return [new ActionRowBuilder().addComponents(buttons)];
     }
@@ -36,7 +36,7 @@ class PrivateReplies {
         });
         return { pages, plain };
     }
-    async send(interaction, text, { refresh } = {}) {
+    async send(interaction, text, { refresh, showStop = false } = {}) {
         if (this.sessions.size >= this.maxSessions) {
             const [oldId, old] = this.sessions.entries().next().value;
             clearTimeout(old.timer); this.sessions.delete(oldId);
@@ -44,7 +44,7 @@ class PrivateReplies {
         }
         const id = randomBytes(12).toString('hex');
         const { pages, plain } = this.makePages(interaction, text);
-        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction, refresh, refreshAfter: 0 };
+        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction, refresh, showStop, refreshAfter: 0 };
         this.sessions.set(id, session);
         session.timer = setTimeout(() => {
             this.sessions.delete(id);
@@ -62,7 +62,7 @@ class PrivateReplies {
             await replyClean(interaction, { content: 'This response expired or isn’t yours. Run the command again.', flags: MessageFlags.Ephemeral });
             return;
         }
-        if (action === 'stop' && this.preferences) {
+        if (action === 'stop' && this.preferences && session.showStop) {
             await interaction.deferUpdate(); this.preferences.setMuted(session.owner, true);
             await session.interaction.editReply(cleanDiscordPayload(this.payload(id, session))); return;
         }

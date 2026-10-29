@@ -84,9 +84,10 @@ test('public replies show a checking status before replacing it with the actual 
     assert.ok(messages[0].edits.some(edit => edit.content === 'Checking the latest price'));
     assert.equal(messages[0].payload.flags, MessageFlags.SuppressEmbeds);
 });
-test('refresh is owner-only and re-executes the task rather than replaying a cached answer', async () => {
-    const controls = new PublicControls({ preferences: new ReplyPreferences(), now: () => NOW }); const { message, messages } = publicMessage(); let calls = 0;
-    await controls.run(message, async () => `Answer ${++calls}`); const id = [...controls.sessions.keys()][0];
+test('price refresh is owner-only and fetches only the recorded price intent', async () => {
+    let calls = 1;
+    const controls = new PublicControls({ preferences: new ReplyPreferences(), now: () => NOW, actions: { execute: async intent => { assert.equal(intent.command, 'price'); return { pages: [{ description: `Answer ${++calls}` }] }; } } }); const { message, messages } = publicMessage();
+    await controls.run(message, async (_progress, _signal, onTool) => { onTool({ command: 'price', args: { token: 'BTC' } }, {}); return 'Answer 1'; }); const id = [...controls.sessions.keys()][0];
     const intruder = button(id, 'refresh', '456'); await controls.onButton(intruder); assert.equal(calls, 1); assert.equal(intruder.events[0][1].flags, MessageFlags.Ephemeral);
     await controls.onButton(button(id, 'refresh')); assert.equal(calls, 2); assert.equal(messages[0].payload.content, 'Answer 2');
     await controls.onButton(button(id, 'refresh')); assert.equal(calls, 2);
@@ -94,7 +95,7 @@ test('refresh is owner-only and re-executes the task rather than replaying a cac
 test('Stop suppresses and cancels an in-flight answer, without muting others', async () => {
     const preferences = new ReplyPreferences(); const controls = new PublicControls({ preferences }); const { message, messages } = publicMessage();
     let finish; let signal;
-    const running = controls.run(message, async (_progress, abort) => { signal = abort; return new Promise(resolve => { finish = resolve; }); });
+    const running = controls.run(message, async (_progress, abort, onTool) => { onTool({ command: 'offer_stop', args: {} }, { confirmationRequired: true }); signal = abort; return new Promise(resolve => { finish = resolve; }); });
     // Initial reply resolves on the next microtask before the task starts.
     await Promise.resolve(); await Promise.resolve();
     const id = [...controls.sessions.keys()][0]; await controls.onButton(button(id, 'stop'));
@@ -109,8 +110,8 @@ test('expired public controls cannot trigger work', async () => {
     await controls.onButton(button([...controls.sessions.keys()][0], 'refresh')); assert.equal(count, 1);
 });
 test('refresh correctly replaces long replies and removes extra stale chunks', async () => {
-    const controls = new PublicControls({ preferences: new ReplyPreferences() }); const { message, messages } = publicMessage(); let count = 0;
-    await controls.run(message, async () => ++count === 1 ? 'A'.repeat(3000) : 'Short new answer');
+    const controls = new PublicControls({ preferences: new ReplyPreferences(), actions: { execute: async () => ({ pages: [{ description: 'Short new answer' }] }) } }); const { message, messages } = publicMessage();
+    await controls.run(message, async (_progress, _signal, onTool) => { onTool({ command: 'price', args: { token: 'BTC' } }, {}); return 'A'.repeat(3000); });
     assert.equal(messages.length, 2); await controls.onButton(button([...controls.sessions.keys()][0], 'refresh'));
     assert.equal(messages[0].payload.content, 'Short new answer'); assert.equal(messages[1].deleted, true);
 });
@@ -126,7 +127,7 @@ test('/start and /stop are private and work even outside conversation channels',
 test('private price refresh reruns its fetch and preserves ephemeral session ownership', async () => {
     const preferences = new ReplyPreferences(); const replies = new PrivateReplies({ preferences }); const edits = [];
     const interaction = { user: { id: '123' }, editReply: async payload => edits.push(payload), deleteReply: async () => {} };
-    let fetched = 0; const id = await replies.send(interaction, 'First price', { refresh: async () => `New price ${++fetched}` });
+    let fetched = 0; const id = await replies.send(interaction, 'First price', { refresh: async () => `New price ${++fetched}`, showStop: true });
     const click = button(id, 'refresh'); click.customId = `private:${id}:refresh`; await replies.onButton(click);
     assert.equal(fetched, 1); assert.match(edits.at(-1).embeds[0].description, /New price 1/);
     const stop = button(id, 'stop'); stop.customId = `private:${id}:stop`; await replies.onButton(stop); assert.equal(preferences.isMuted('123'), true);
@@ -159,7 +160,7 @@ test('external Stop cancellation propagates into the actual agent model call', a
 });
 test('private controls stay within Discord five-button row limit', async () => {
     const replies = new PrivateReplies({ preferences: new ReplyPreferences() });
-    const row = replies.controls('id', 0, 3, { owner: '123', refresh: async () => {} })[0].toJSON();
+    const row = replies.controls('id', 0, 3, { owner: '123', refresh: async () => {}, showStop: true })[0].toJSON();
     assert.equal(row.components.length, 5); replies.destroy();
 });
 test('stopping through preferences cancels all that user active public tasks only', async () => {
@@ -171,4 +172,59 @@ test('stopping through preferences cancels all that user active public tasks onl
     await Promise.resolve(); await Promise.resolve(); preferences.setMuted('123', true);
     assert.equal(signals[0].aborted, true); assert.equal(signals[1].aborted, false);
     finishes.forEach(finish => finish('Done')); await Promise.all([a, b]);
+});
+test('ordinary public chat has no Stop or Refresh buttons, including its checking placeholder', async () => {
+    const controls = new PublicControls({ preferences: new ReplyPreferences() }); const { message, messages } = publicMessage();
+    await controls.run(message, async () => 'Hello there');
+    assert.deepEqual(messages[0].payload.components, []);
+    assert.ok(messages[0].edits.every(edit => !edit.components?.length));
+    const id = [...controls.sessions.keys()][0]; await controls.onButton(button(id, 'stop'));
+    assert.equal(controls.preferences.isMuted('123'), false);
+});
+test('a crypto price answer has only Refresh price, and a stop request has only Stop', async () => {
+    for (const command of ['price', 'offer_stop']) {
+        const controls = new PublicControls({ preferences: new ReplyPreferences() }); const { message, messages } = publicMessage();
+        await controls.run(message, async (_progress, _signal, onTool) => {
+            onTool({ command, args: command === 'price' ? { token: 'BTC' } : {} }, { confirmationRequired: true }); return 'Answer';
+        });
+        const buttons = messages[0].payload.components[0].toJSON().components;
+        assert.deepEqual(buttons.map(item => item.label), [command === 'price' ? 'Refresh price' : 'Stop replies to me']);
+    }
+});
+test('default private cards have neither Stop nor Refresh, while price refresh is opt-in', () => {
+    const replies = new PrivateReplies({ preferences: new ReplyPreferences() });
+    const labels = state => replies.controls('id', 0, 1, { owner: '123', ...state })[0].toJSON().components.map(item => item.label);
+    assert.deepEqual(labels({}), ['Dismiss']);
+    assert.deepEqual(labels({ refresh: async () => {} }), ['Refresh price', 'Dismiss']);
+    assert.deepEqual(labels({ showStop: true }), ['Stop replies to me', 'Dismiss']); replies.destroy();
+});
+test('non-price slash commands no longer receive a refresh or stop button', async () => {
+    for (const commandName of ['search', 'read', 'pair', 'newpairs', 'chat']) {
+        let options;
+        const handler = createWeb3Handler({ config: { channels: ['channel'] }, logger: quiet,
+            replies: { send: async (_interaction, _result, flags) => { options = flags; } }, agent: { respond: async () => 'Hello' },
+            actions: { execute: async intent => intent.command === 'web_search' ? { results: [] } : intent.command === 'read_page' ? { title: 'Page', content: 'Text', url: 'https://example.com' } : { pages: [{ title: 'Pools' }] } } });
+        await handler({ commandName, user: { id: '123' }, channelId: 'channel', isChatInputCommand: () => true, deferReply: async () => {}, options: { getString: () => 'https://example.com' } });
+        assert.equal(options.refresh, undefined); assert.equal(options.showStop, false);
+    }
+});
+test('private AI chat exposes contextual controls through actual tool execution metadata', async () => {
+    for (const command of ['price', 'offer_stop']) {
+        let flags;
+        const handler = createWeb3Handler({ config: { channels: ['channel'] }, logger: quiet,
+            replies: { send: async (_interaction, _result, options) => { flags = options; } },
+            agent: { respond: async (_text, options) => { options.onTool({ command, args: command === 'price' ? { token: 'BTC' } : {} }, { confirmationRequired: true }); return 'Answer'; } } });
+        await handler({ commandName: 'chat', user: { id: '123' }, channelId: 'channel', isChatInputCommand: () => true, deferReply: async () => {}, options: { getString: () => 'request' } });
+        assert.equal(typeof flags.refresh, command === 'price' ? 'function' : 'undefined'); assert.equal(flags.showStop, command === 'offer_stop');
+    }
+});
+test('bare stop is allowed only the confirmation tool, while BTC still has no tools', async () => {
+    let request; let intent;
+    const agent = createAgent({ config: {}, actions: { execute: async chosen => { intent = chosen; return { confirmationRequired: true }; } }, client: { chat: { completions: { create: async input => {
+        request = input;
+        return { choices: [{ message: input.messages.some(m => m.role === 'tool') ? { content: 'Click Stop to confirm' } : { tool_calls: [{ id: 'stop', function: { name: 'offer_stop', arguments: '{}' } }] } }] };
+    } } } } });
+    const observed = [];
+    await agent.respond('stop', { onTool: (tool, output) => observed.push({ tool, output }) });
+    assert.deepEqual(request.tools.map(tool => tool.function.name), ['offer_stop']); assert.equal(intent.command, 'offer_stop'); assert.equal(observed[0].output.confirmationRequired, true);
 });

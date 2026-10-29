@@ -25,7 +25,7 @@ Supported chain names: `ethereum` (also `eth`), `solana`, `base`, `bsc`, `arbitr
 
 ### Private, temporary results
 
-All slash results are **ephemeral**: visible only to the person invoking the command. Results use compact Discord embed cards. Multi-page results show Back/Next buttons; single-page results show only Dismiss. No public message spam. Dismiss deletes the response. The bot attempts automatic deletion after 10 minutes while it remains online. Discord display behavior and application restarts can prevent exact deletion timing. Ephemeral is not end-to-end encryption, and does not prevent screenshots.
+All slash results are **ephemeral**: visible only to the person invoking the command. Results use compact Discord embed cards. Multi-page results show Back/Next buttons; single-page results normally show only Dismiss. Price answers additionally show Refresh price; an explicit request to stop replies adds a Stop confirmation button. No public message spam. Dismiss deletes the response. The bot attempts automatic deletion after 10 minutes while it remains online. Discord display behavior and application restarts can prevent exact deletion timing. Ephemeral is not end-to-end encryption, and does not prevent screenshots.
 
 Pagination is owner-checked and process-local, so buttons expire on restart. There are at most 200 active private result sessions; oldest sessions are dismissed when capacity is reached. Text fallback input is capped at 20,000 characters; structured results are capped at 20 cards. Cards keep complete records together instead of splitting them mid-sentence. Errors never fall back to a public channel message.
 
@@ -39,7 +39,7 @@ In allowed channels, members can ask directly:
 Member: whats the current btc price?
 Bot:    Thinking and checking
 Bot:    BTC: $80,532.63 · CoinGecko · updated 46s ago
-        [Refresh] [Stop replies to me]
+        [Refresh price]
 ```
 
 Illustrative price only. CoinGecko is the default current-price source, using `/api/v3/simple/price` with `include_last_updated_at=true`. Common tickers map to explicit CoinGecko IDs. Other names/symbols use exact search matching and require clarification when ambiguous. Use a full CoinGecko ID for uncommon coins. Every price/refresh bypasses the bot price cache; only simultaneous identical requests may be coalesced. Provider-side caches still apply.
@@ -52,7 +52,9 @@ For a fresh exchange last trade, explicitly request one or use `/price token:BTC
 
 Public requests first show a short **Thinking and checking** placeholder, then safe tool-status text such as **Checking the latest price**. The final answer replaces the placeholder; internal reasoning is never exposed. Slash commands use Discord's private deferred thinking state. Ordinary answers default to 1–3 short sentences, with one compact source link; detail is reserved for explicit requests. There is no extra model call just to produce a thinking paragraph, nor a forced web search for tasks that do not need current facts.
 
-Public **Refresh** reruns the original task against the tools; it does not replay a stored answer. Existing reply chunks are updated and obsolete chunks are removed. Private price/pair/discovery/search/read responses have a Refresh button that reruns their corresponding direct operation. Provider cache windows still apply (for example, pool/discovery data), so refresh does not guarantee changed values. Controls are owner-checked, rate-limited, process-local and expire after about 10 minutes or a restart; capacity eviction can expire them earlier.
+Ordinary public chat has **no buttons**, including its checking placeholder. A crypto-price answer gets **Refresh price** only after the agent actually calls the validated price tool (or the user invokes `/price`). Refresh re-executes just the recorded price request(s), not the original conversation, search or another model round. Existing reply chunks are updated and obsolete chunks are removed. Private `/chat` price answers and direct `/price` results also get price refresh; pool/discovery/search/read commands do not. Refresh bypasses the bot price cache but cannot force an upstream price change. Controls are owner-checked, rate-limited, process-local and expire after about 10 minutes or a restart; capacity eviction can expire them earlier.
+
+The **Stop replies to me** confirmation button appears only when the user explicitly asks this bot to stop replying to them. The AI selects the `offer_stop` tool; that tool only offers confirmation and does not mute automatically. Stop-loss trading questions, stopping a draft, quoted text and general conversation must not offer it. `/stop` remains an explicit direct way to mute without a confirmation button.
 
 **Stop replies to me** or `/stop` disables automatic replies to that user in all servers, including mentions and follow-ups, without muting other members. `/start` restores them. The preference is stored atomically in ignored `data/reply-preferences.json`; keep this directory on persistent host storage to retain it across redeploys. `/start` and `/stop` work outside the bot's channel allowlist so users can always change their preference. Explicit slash commands remain available while stopped. Stop also cancels active model/web requests where supported and suppresses pending public answers; an already-sent network request cannot always be recalled. Market HTTP work may finish under its own timeout without producing a stopped user's reply.
 

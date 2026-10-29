@@ -30,11 +30,11 @@ async function main() {
     const commandSync = new GuildCommandSync({ rest: client.rest, commands, logger: log.child('command-sync') });
     const queue = new ChannelQueue(config.maxPendingPerChannel);
     const preferences = new ReplyPreferences(path.resolve(__dirname, '../data/reply-preferences.json'));
-    const controls = new PublicControls({ preferences, logger: log.child('controls') });
     const replies = new PrivateReplies({ preferences });
     const market = new MarketService(new PublicApi({ logger: log.child('market-api'), coingeckoApiKey: process.env.COINGECKO_DEMO_API_KEY }));
     const web = new WebService({ apiKey: config.ollamaApiKey });
     const actions = new Actions({ market, knowledge, web });
+    const controls = new PublicControls({ preferences, actions, logger: log.child('controls') });
     const modelClient = createModelClient(config, { logger: log.child('ai') });
     const agent = createAgent({ client: modelClient, actions, config, logger: log.child('agent') });
     const onInteraction = createWeb3Handler({ config, replies, actions, market, knowledge, agent, preferences, controls, logger: log.child('commands') });

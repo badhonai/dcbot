@@ -4,7 +4,7 @@ const { splitMessage } = require('../utils/split-message');
 const { createLogger, errorDetails } = require('../utils/logger');
 const safeMentions = { parse: [], repliedUser: false };
 function looksLikeRequest(text) {
-    return /[?？]|https:\/\//i.test(text) || /^(?:what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
+    return /^(?:don't|do not)\s+(?:reply|respond|message|talk)\b/i.test(text) || /[?？]|https:\/\//i.test(text) || /^(?:what|whats|how|why|when|where|who|can you|could you|please|explain|summari[sz]e|search|find|read|translate|write|draft|compare|calculate|check|tell|show|help|stop|unsubscribe|mute|pause)\b/i.test(text) || /\b(?:koto|ki|bolo|bolen|dam|daam)\b/i.test(text) || /(?:কী|কি|কেন|কত|বলুন|দেখাও|লিখে|খুঁজে)/u.test(text);
 }
 function createAgentMessageHandler({ client, config, queue, agent, preferences, controls, logger = createLogger('chat'), now = Date.now }) {
     const allowed = new Set(config.channels); const cooldowns = new Map();
@@ -38,7 +38,7 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                     await message.channel.sendTyping();
                     timer = setInterval(() => message.channel.sendTyping().catch(() => {}), 8000); timer.unref?.();
                     if (controls) {
-                        await controls.run(message, (onProgress, signal) => agent.respond(input, { sessionKey, reference, onProgress, signal }), config.maxResponseLength || 1900);
+                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, onProgress, signal, onTool }), config.maxResponseLength || 1900);
                         return;
                     }
                     const response = await agent.respond(input, { sessionKey, reference });

@@ -1,20 +1,21 @@
 const { randomBytes } = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
+const { money } = require('../features/market');
 const { splitMessage } = require('../utils/split-message');
 const safeMentions = { parse: [], repliedUser: false };
 class PublicControls {
-    constructor({ preferences, now = Date.now, logger = { warn() {} } }) {
-        this.preferences = preferences; this.now = now; this.logger = logger; this.sessions = new Map(); this.cooldowns = new Map();
+    constructor({ preferences, actions, now = Date.now, logger = { warn() {} } }) {
+        this.preferences = preferences; this.actions = actions; this.now = now; this.logger = logger; this.sessions = new Map(); this.cooldowns = new Map();
         preferences.on?.('change', (owner, muted) => {
             if (muted) for (const state of this.sessions.values()) if (state.owner === owner) state.abort?.abort();
         });
     }
     components(id, state) {
-        return [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`agent:${id}:refresh`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setDisabled(state.busy),
-            new ButtonBuilder().setCustomId(`agent:${id}:stop`).setLabel('Stop replies to me').setStyle(ButtonStyle.Secondary),
-        )];
+        const buttons = [];
+        if (state.prices?.size) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:refresh`).setLabel('Refresh price').setStyle(ButtonStyle.Secondary).setDisabled(state.busy));
+        if (state.stopRequested) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:stop`).setLabel('Stop replies to me').setStyle(ButtonStyle.Secondary));
+        return buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
     }
     async run(message, task, maxLength = 1900) {
         const owner = message.author.id;
@@ -22,14 +23,14 @@ class PublicControls {
         for (const [key, state] of this.sessions) if (state.expires <= this.now()) this.sessions.delete(key);
         if (this.sessions.size >= 200) this.sessions.delete(this.sessions.keys().next().value);
         const id = randomBytes(12).toString('hex');
-        const state = { owner, task, message, maxLength, messages: [], busy: true, expires: this.now() + 600000 };
+        const state = { owner, task, message, maxLength, messages: [], prices: new Map(), stopRequested: false, busy: true, expires: this.now() + 600000 };
         this.sessions.set(id, state);
         try {
             state.messages.push(await replyClean(message, { content: 'Thinking and checking...', components: this.components(id, state), flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
             await this.execute(id, state);
         } catch (error) { this.sessions.delete(id); throw error; }
     }
-    async execute(id, state) {
+    async execute(id, state, refreshing = false) {
         const revision = this.preferences.revision(state.owner);
         state.abort = new AbortController();
         const valid = () => !this.preferences.isMuted(state.owner) && revision === this.preferences.revision(state.owner);
@@ -37,9 +38,28 @@ class PublicControls {
         let text;
         try {
             if (!valid()) throw new Error('Request stopped');
-            text = await state.task(async content => {
-                if (valid()) await edit({ content, components: this.components(id, state) });
-            }, state.abort.signal);
+            if (refreshing) {
+                const lines = [];
+                for (const intent of state.prices.values()) {
+                    if (!valid()) throw new Error('Request stopped');
+                    const result = await this.actions.execute(intent, { signal: state.abort.signal });
+                    if (result.quote) {
+                        const q = result.quote;
+                        lines.push(`${q.symbol}: **${money(q.price)}** · ${q.sourceLabel || q.source} · ${q.kind === 'aggregate' ? 'updated' : 'trade'} ${q.ageSeconds}s ago`);
+                    } else {
+                        const page = result.pages?.[0];
+                        lines.push([page?.title, page?.description, page?.footer?.text].filter(Boolean).join(' · ') || 'Recent price unavailable. Try again shortly.');
+                    }
+                }
+                text = lines.join('\n');
+            } else {
+                text = await state.task(async content => {
+                    if (valid()) await edit({ content, components: this.components(id, state) });
+                }, state.abort.signal, (intent, output) => {
+                    if (intent.command === 'price') state.prices.set(JSON.stringify(intent.args), intent);
+                    if (intent.command === 'offer_stop' && output?.confirmationRequired) state.stopRequested = true;
+                });
+            }
         } catch {
             text = 'I couldn’t verify that right now. Please try again shortly.';
         } finally { state.busy = false; }
@@ -58,7 +78,7 @@ class PublicControls {
     async onButton(interaction) {
         const [, id, action] = interaction.customId.split(':');
         const state = this.sessions.get(id);
-        if (!state || state.expires <= this.now() || state.owner !== interaction.user.id || !['refresh', 'stop'].includes(action)) {
+        if (!state || state.expires <= this.now() || state.owner !== interaction.user.id || !['refresh', 'stop'].includes(action) || action === 'refresh' && !state.prices.size || action === 'stop' && !state.stopRequested) {
             await replyClean(interaction, { content: 'This control expired or isn’t yours. Use /start or /stop to change your preference.', flags: MessageFlags.Ephemeral }); return;
         }
         if (action === 'stop') {
@@ -77,7 +97,7 @@ class PublicControls {
         try {
             await interaction.deferUpdate();
             await state.messages[0].edit(cleanDiscordPayload({ content: 'Checking again...', components: this.components(id, state) }));
-            await this.execute(id, state);
+            await this.execute(id, state, true);
         } finally { state.busy = false; }
     }
 }

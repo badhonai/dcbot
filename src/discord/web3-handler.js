@@ -61,10 +61,15 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
             const started = Date.now();
             try {
                 const option = name => interaction.options.getString(name);
+                const priceIntents = new Map(); let showStop = false;
+                const onTool = (intent, output) => {
+                    if (intent.command === 'price') priceIntents.set(JSON.stringify(intent.args), intent);
+                    if (intent.command === 'offer_stop' && output?.confirmationRequired) showStop = true;
+                };
                 const execute = async () => {
                     let result;
                     if (interaction.commandName === 'chat') {
-                        result = agent ? await agent.respond(option('message'), { sessionKey: `private:${interaction.channelId}:${interaction.user.id}` }) : 'AI is not configured. Use /help for direct commands.';
+                        result = agent ? await agent.respond(option('message'), { sessionKey: `private:${interaction.channelId}:${interaction.user.id}`, onTool }) : 'AI is not configured. Use /help for direct commands.';
                     } else if (interaction.commandName === 'search') {
                         const found = await actions.execute({ command: 'web_search', args: { query: option('query') } });
                         result = found.results.length ? pages(found.results.map(item => card(item.title || 'Search result', clip(item.content, 650), { url: item.url, footer: 'Web search snippet · Read the source for context' }))) : notice('No results', 'Try a different search query.');
@@ -86,8 +91,12 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                     return result;
                 };
                 const result = await execute();
-                const refresh = ['price', 'pair', 'newpairs', 'search', 'read'].includes(interaction.commandName) ? execute : undefined;
-                await replies.send(interaction, result, { refresh });
+                const refresh = interaction.commandName === 'price' ? execute : priceIntents.size ? async () => {
+                    const results = [];
+                    for (const intent of priceIntents.values()) results.push(...(await actions.execute(intent)).pages);
+                    return pages(results);
+                } : undefined;
+                await replies.send(interaction, result, { refresh, showStop });
                 logger.debug?.('Command completed', { command: interaction.commandName, durationMs: Date.now() - started });
             } finally { active--; }
         } catch (error) {

@@ -98,8 +98,9 @@ function interaction(name = 'help', user = 'u') {
 test('private results paginate below Discord size limit and enforce owner', async t => {
     const replies = new PrivateReplies(); t.after(() => replies.destroy());
     const i = interaction(); const id = await replies.send(i, 'x'.repeat(6000));
-    assert.equal(i.events[0][1].content, '');
-    assert.ok(i.events[0][1].embeds[0].description.length <= 900);
+    assert.ok(i.events[0][1].content.length < 400);
+    await replies.onButton({ customId: `private:${id}:more`, user: i.user, deferUpdate: async () => {} });
+    assert.ok(i.events[1][1].embeds[0].description.length <= 900);
     let denied;
     await replies.onButton({ customId: `private:${id}:next`, user: { id: 'other' }, reply: async p => { denied = p; } });
     assert.equal(denied.flags, MessageFlags.Ephemeral); assert.equal(replies.sessions.get(id).page, 0);
@@ -119,7 +120,8 @@ test('help is deferred privately before result, with no public sends', async t =
     const handler = createWeb3Handler({ config: { channels: ['allowed'] }, replies, market: {}, knowledge: {} });
     const i = interaction(); await handler(i);
     assert.equal(i.events[0][0], 'defer'); assert.equal(i.events[0][1].flags, MessageFlags.Ephemeral);
-    assert.equal(i.events[1][1].embeds[0].title, 'Command guide');
+    assert.ok(i.events[1][1].content.length < 400);
+    assert.match(i.events[1][1].content, /All results are private/);
 });
 test('command failures remain private and never expose raw internals', async t => {
     const replies = new PrivateReplies(); t.after(() => replies.destroy());

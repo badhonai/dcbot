@@ -1,4 +1,5 @@
 const { detectLanguage, localizeFixed } = require('../conversation/language');
+const { compactPreview } = require('../conversation/compact-view');
 const { randomBytes } = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
@@ -15,6 +16,10 @@ class PublicControls {
     components(id, state) {
         if (this.boundaries?.pausedUntil(state.owner)) return [];
         const buttons = [];
+        if (state.expandable) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:${state.expanded ? 'less' : 'more'}`).setLabel(state.expanded ? 'Less' : 'More').setStyle(ButtonStyle.Secondary).setDisabled(state.busy));
+        if (state.expanded && state.fullPages?.length > 1) buttons.push(
+            new ButtonBuilder().setCustomId(`agent:${id}:previous`).setLabel('Back').setStyle(ButtonStyle.Secondary).setDisabled(state.busy || state.page === 0),
+            new ButtonBuilder().setCustomId(`agent:${id}:next`).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(state.busy || state.page === state.fullPages.length - 1));
         if (state.prices?.size) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:refresh`).setLabel('Refresh price').setStyle(ButtonStyle.Secondary).setDisabled(state.busy));
         if (state.stopRequested) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:stop`).setLabel('Stop replies to me').setStyle(ButtonStyle.Secondary));
         return buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
@@ -56,7 +61,7 @@ class PublicControls {
                 text = lines.join('\n');
             } else {
                 text = await state.task(async content => {
-                    if (valid()) await edit({ content, components: this.components(id, state) });
+                    if (valid()) await edit({ content: compactPreview(content, { language: state.language }), components: this.components(id, state) });
                 }, state.abort.signal, (intent, output) => {
                     if (intent.command === 'report_direct_abuse' && output?.boundaryNotice) state.boundaryNotice = output.boundaryNotice;
                     if (intent.command === 'price') state.prices.set(JSON.stringify(intent.args), intent);
@@ -73,19 +78,23 @@ class PublicControls {
             }
             await edit({ content: 'Request stopped. Use /start to enable automatic replies again.', components: [] }); return;
         }
-        const chunks = splitMessage(text || 'No answer available.', Math.min(state.maxLength, 1900));
-        for (let i = 0; i < chunks.length; i++) {
-            if (!valid()) return;
-            const payload = cleanDiscordPayload({ content: localizeFixed(chunks[i], state.language), components: i === 0 ? this.components(id, state) : [], flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
-            if (state.messages[i]) await state.messages[i].edit(payload);
-            else state.messages.push(await state.message.reply(payload));
-        }
-        for (const old of state.messages.splice(chunks.length)) await old.delete().catch(() => {});
+        state.fullPages = splitMessage(localizeFixed(text || 'No answer available.', state.language), Math.min(state.maxLength, 1900));
+        state.summary = compactPreview(localizeFixed(text || 'No answer available.', state.language), { language: state.language });
+        state.expandable = state.fullPages.length > 1 || state.fullPages[0].length >= 400;
+        state.expanded = false; state.page = 0;
+        await this.render(id, state);
     }
+    async render(id, state) {
+        if (this.sessions.get(id) !== state || state.expires <= this.now() || this.preferences.isMuted(state.owner) || this.boundaries?.pausedUntil(state.owner) && !state.boundaryNotice) return;
+        const content = state.expanded ? state.fullPages[state.page] : state.summary;
+        await state.messages[0].edit(cleanDiscordPayload({ content, components: this.components(id, state), flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
+        for (const old of state.messages.splice(1)) await old.delete().catch(() => {});
+    }
+
     async onButton(interaction) {
         const [, id, action] = interaction.customId.split(':');
         const state = this.sessions.get(id);
-        if (!state || state.expires <= this.now() || state.owner !== interaction.user.id || !['refresh', 'stop'].includes(action) || action === 'refresh' && !state.prices.size || action === 'stop' && !state.stopRequested) {
+        if (!state || state.expires <= this.now() || state.owner !== interaction.user.id || !['refresh', 'stop', 'more', 'less', 'next', 'previous'].includes(action) || action === 'refresh' && !state.prices.size || action === 'stop' && !state.stopRequested) {
             await replyClean(interaction, { content: 'This control expired or isn’t yours. Use /start or /stop to change your preference.', flags: MessageFlags.Ephemeral }); return;
         }
         if (action === 'stop') {
@@ -98,7 +107,23 @@ class PublicControls {
         if (this.boundaries?.pausedUntil(state.owner)) {
             await replyClean(interaction, { content: 'Our conversation is paused for 5 hours. Please try after the pause ends.', flags: MessageFlags.Ephemeral }); return;
         }
-        if (this.preferences.isMuted(state.owner) || state.busy || (this.cooldowns.get(state.owner) || 0) > this.now()) {
+        if (['more', 'less', 'next', 'previous'].includes(action)) {
+            if (this.preferences.isMuted(state.owner) || state.busy || state.toggling || !state.expandable || ['next', 'previous'].includes(action) && !state.expanded) {
+                await replyClean(interaction, { content: 'That view is busy or unavailable. Try again shortly.', flags: MessageFlags.Ephemeral }); return;
+            }
+            state.toggling = true;
+            const old = { expanded: state.expanded, page: state.page };
+            try {
+                await interaction.deferUpdate();
+                if (action === 'more') { state.expanded = true; state.page = 0; }
+                else if (action === 'less') { state.expanded = false; state.page = 0; }
+                else state.page = Math.max(0, Math.min(state.fullPages.length - 1, state.page + (action === 'next' ? 1 : -1)));
+                await this.render(id, state);
+            } catch (error) { Object.assign(state, old); throw error; }
+            finally { state.toggling = false; }
+            return;
+        }
+        if (this.preferences.isMuted(state.owner) || state.busy || state.toggling || (this.cooldowns.get(state.owner) || 0) > this.now()) {
             await replyClean(interaction, { content: this.preferences.isMuted(state.owner) ? 'Replies are stopped. Use /start to resume.' : 'Already checking, or on cooldown. Try again shortly.', flags: MessageFlags.Ephemeral }); return;
         }
         state.busy = true;

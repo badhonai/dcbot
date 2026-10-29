@@ -139,3 +139,7 @@ Added seven community slash/AI workflows (`coin`, `compare`, `trending`, `x`/`x_
 ## Reply presentation patch 1.1.1
 
 Respectful tumi/apni phrasing with occasional safe banter; links only on explicit request, including private card filtering; summary-first Discord Markdown blocks; Markdown-aware public/private splitting; removal of silent final-answer clipping; bounded completion/summarization repair on cutoffs/oversize responses. Default token headroom increased without changing dependencies or hosting footprint. 301 offline tests pass. See README's 1.1.1 section for limits and retry behavior. This supersedes older notes about automatic source-link footers.
+
+## Compact-view patch 1.1.2
+
+Initial results are limited to 399 characters, with owner-checked More/Less and expanded pagination. Display toggles reuse saved data without AI/API calls; public output edits a single message. Relevant masked source labels are on by default, with explicit per-request opt-out, superseding 1.1.1's link suppression default. Eligible public-fact inability/model errors and public /read errors have one bounded web fallback; private-network/credential/safety/consent and live-price restrictions remain. 326 offline Node 22 tests pass; live rollout still requires restart/acceptance checks. See README's 1.1.2 section for caveats.

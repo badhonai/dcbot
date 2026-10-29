@@ -109,11 +109,11 @@ test('expired public controls cannot trigger work', async () => {
     await controls.run(message, async () => `${++count}`); now += 600001;
     await controls.onButton(button([...controls.sessions.keys()][0], 'refresh')); assert.equal(count, 1);
 });
-test('refresh correctly replaces long replies and removes extra stale chunks', async () => {
+test('refresh replaces a collapsed long reply without creating extra public messages', async () => {
     const controls = new PublicControls({ preferences: new ReplyPreferences(), actions: { execute: async () => ({ pages: [{ description: 'Short new answer' }] }) } }); const { message, messages } = publicMessage();
     await controls.run(message, async (_progress, _signal, onTool) => { onTool({ command: 'price', args: { token: 'BTC' } }, {}); return 'A'.repeat(3000); });
-    assert.equal(messages.length, 2); await controls.onButton(button([...controls.sessions.keys()][0], 'refresh'));
-    assert.equal(messages[0].payload.content, 'Short new answer'); assert.equal(messages[1].deleted, true);
+    assert.equal(messages.length, 1); assert.ok(messages[0].payload.content.length < 400); await controls.onButton(button([...controls.sessions.keys()][0], 'refresh'));
+    assert.equal(messages[0].payload.content, 'Short new answer'); assert.equal(messages.length, 1);
 });
 test('/start and /stop are private and work even outside conversation channels', async () => {
     const preferences = new ReplyPreferences(); const sent = [];
@@ -160,8 +160,8 @@ test('external Stop cancellation propagates into the actual agent model call', a
 });
 test('private controls stay within Discord five-button row limit', async () => {
     const replies = new PrivateReplies({ preferences: new ReplyPreferences() });
-    const row = replies.controls('id', 0, 3, { owner: '123', refresh: async () => {}, showStop: true })[0].toJSON();
-    assert.equal(row.components.length, 5); replies.destroy();
+    const rows = replies.controls('id', 0, 3, { owner: '123', refresh: async () => {}, showStop: true, expandable: true, expanded: true }).map(row => row.toJSON());
+    assert.equal(rows.flatMap(r => r.components).length, 6); assert.ok(rows.every(r => r.components.length <= 5)); replies.destroy();
 });
 test('stopping through preferences cancels all that user active public tasks only', async () => {
     const preferences = new ReplyPreferences(); const controls = new PublicControls({ preferences }); const signals = [];

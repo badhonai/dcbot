@@ -1,6 +1,6 @@
 const { cleanResponse } = require('../ai/groq-service');
 const { languageDirective } = require('./language');
-const PRESENTATION_RULES = `Use Discord Markdown, not HTML or Markdown tables. Default to a short complete answer, not a cut-off excerpt. For longer replies lead with a one-sentence summary, then 2–4 short blocks separated by blank lines; use **bold section labels** and short bullet lists. Avoid walls of text, giant headings and unnecessary code fences. Use a code block only for actual code. Finish sentences, bullets and code blocks within the output budget. Do not dump raw research snippets. Summarize lengthy source material faithfully; give full detail only when explicitly requested. No links, URLs or automatic Sources footer unless this user explicitly asks for links/sources/URLs. When asked, provide only relevant supplied links as Discord masked links without previews. Never invent links.
+const PRESENTATION_RULES = `Use Discord Markdown, not HTML or Markdown tables. Default to a short complete answer, not a cut-off excerpt. For longer replies lead with a one-sentence summary, then 2–4 short blocks separated by blank lines; use **bold section labels** and short bullet lists. Avoid walls of text, giant headings and unnecessary code fences. Use a code block only for actual code. Finish sentences, bullets and code blocks within the output budget. Do not dump raw research snippets. Summarize lengthy source material faithfully; give full detail only when explicitly requested. Relevant grounded links may appear by default, but only as short Discord masked labels like [Source](<url>), never raw URL dumps or previews. Omit links if the user asks. Begin every answer with a complete concise summary ideally under 280 characters. Additional useful detail may follow in short blocks; the interface keeps it behind More/Less controls. No apology filler; for public factual questions try an available web search before declaring missing information. Never invent links.
 Always be respectful, even when the user uses rough or intimate language. Use tumi/tomra for friendly Banglish/Bangla and apni/apnara for formal speech; never address a member as tui/tora/tor/toke or তুই/তোরা/তোর/তোকে, and avoid their disrespectful verb forms. Friendly occasional teasing is welcome, but never condescending or constant. Serious requests, corrections and opt-outs take priority.`;
 function wantsLinks(input = '') {
     const text = String(input).replace(/https?:\/\/\S+|```[\s\S]*?```|`[^`]*`/g, ' ');
@@ -11,6 +11,15 @@ function wantsLinks(input = '') {
         || new RegExp('^\\s*' + terms + '\\b|\\b' + terms + '\\s+(?:please|dao|den|din|daw|chai|lagbe|bolo|diben)\\b', 'i').test(text)
         || /\b(?:official|project|documentation)\s+(?:links?|website|homepage)\b|\b(?:what|what's|which)\b.{0,50}\b(?:their|its|official|project)\b.{0,20}\b(?:website|homepage|urls?|links?)\b|\blink\s+(?:ta|gulo|gula)\s+(?:dao|den|din|daw|chai|lagbe)\b/i.test(text)
         || /লিংক|লিঙ্ক|ওয়েবসাইট|ওয়েবসাইট|তথ্যসূত্র|সূত্র দাও|সূত্র দিন/u.test(text);
+}
+function allowLinks(input = '') {
+    return !/\b(?:no|without|omit|avoid|hide|remove|don't (?:send|include|show)|do not (?:send|include|show))\s+(?:any\s+)?(?:links?|sources?|urls?|citations?)\b/i.test(input) && !/(?:লিংক|লিঙ্ক|সূত্র).{0,12}(?:দিও না|দেবে না|চাই না)|\b(?:link|source|url)\s+(?:dio na|diyo na|lagbe na)\b/i.test(input);
+}
+function maskedLinks(text) {
+    return String(text).split(/(```[\s\S]*?```|`[^`\n]*`|\[[^\]\n]+\]\((?:<https?:\/\/[^>\n]+>|https?:\/\/[^\s\n]+)\))/g).map((part, i) => {
+        if (i % 2) return part.replace(/^\[([^\]]+)\]\(<?(https?:\/\/.*?)>?\)$/, (_, label, url) => `[${/^\d+$/.test(label) ? 'Source ' + label : label.slice(0, 36)}](<${url.replace(/[()]/g, encodeURIComponent)}>)`);
+        return part.replace(/https?:\/\/[^\s<>]+/g, url => `[Source](<${url.replace(/[()]/g, encodeURIComponent)}>)`);
+    }).join('');
 }
 function stripLinks(text) {
     return String(text).split(/(```[\s\S]*?```|`[^`\n]*`)/g).map((part, i) => i % 2 ? part : part.replace(/\n*\s*-#\s*Sources:[^\n]*(?:\n|$)/gi, '\n')
@@ -54,7 +63,7 @@ function formatBlocks(text) {
         }).join('\n\n');
     }).join('').replace(/\n{3,}/g, '\n\n').trim();
 }
-function presentAnswer(text, { includeLinks = false } = {}) { return formatBlocks(respectful(includeLinks ? text : stripLinks(text))); }
+function presentAnswer(text, { includeLinks = true } = {}) { return formatBlocks(respectful(includeLinks ? maskedLinks(text) : stripLinks(text))); }
 function incompleteNotice(language) {
     return language === 'bn' ? 'পুরো উত্তরটি শেষ করা যায়নি। আবার চেষ্টা করবেন?' : language === 'banglish' ? 'Puro uttorta shesh kora jayni. Abar try korben?' : 'I could not finish the full answer. Please try again.';
 }
@@ -80,4 +89,4 @@ async function completeAnswer(draft, { finishReason, input, language, evidence =
         return text;
     } catch (error) { if (signal?.aborted) throw error; return partialFallback(draft, language); }
 }
-module.exports = { PRESENTATION_RULES, wantsLinks, stripLinks, respectful, formatBlocks, presentAnswer, completeAnswer };
+module.exports = { PRESENTATION_RULES, wantsLinks, allowLinks, maskedLinks, stripLinks, respectful, formatBlocks, presentAnswer, completeAnswer };

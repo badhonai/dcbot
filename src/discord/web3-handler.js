@@ -1,4 +1,5 @@
-const { wantsLinks } = require('../conversation/reply-presentation');
+const { eligible, blockedRead, searchFallback } = require('../ai/public-fallback');
+const { allowLinks } = require('../conversation/reply-presentation');
 const { localizeFixed } = require('../conversation/language');
 const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
@@ -94,8 +95,15 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                         const found = await actions.execute({ command: 'web_search', args: { query: option('query') } });
                         result = found.results.length ? pages(found.results.map(item => card(item.title || 'Search result', clip(item.content, 650), { url: item.url, footer: 'Web search snippet · Read the source for context' }))) : notice('No results', 'Try a different search query.');
                     } else if (interaction.commandName === 'read') {
-                        const found = await actions.execute({ command: 'read_page', args: { url: option('url') } });
-                        result = pages(card(found.title, clip(found.content || 'No readable text found.', 1000), { url: found.url, footer: 'Webpage excerpt · Use /chat to request a summary' }));
+                        try {
+                            const found = await actions.execute({ command: 'read_page', args: { url: option('url') } });
+                            result = pages(card(found.title, clip(found.content || 'No readable text found.', 1000), { url: found.url, footer: 'Webpage excerpt · Use /chat to request a summary' }));
+                        } catch (error) {
+                            if (blockedRead(error) || !eligible('Read ' + option('url'))) throw error;
+                            const fallback = await searchFallback('Read ' + option('url'), { actions });
+                            if (!fallback) throw error;
+                            result = fallback.text;
+                        }
                     } else if (actions && interaction.commandName !== 'help') {
                         const command = interaction.commandName === 'x' ? 'x_research' : interaction.commandName;
                         const args = Object.fromEntries(Object.keys(SPECS[command].properties).map(name => [name, option(name)]).filter(([, value]) => value));
@@ -118,7 +126,7 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                     for (const intent of priceIntents.values()) results.push(...(await actions.execute(intent)).pages);
                     return pages(results);
                 } : undefined;
-                const includeLinks = interaction.commandName === 'official' || wantsLinks([option('message'), option('question'), option('query')].filter(Boolean).join(' '));
+                const includeLinks = allowLinks([option('message'), option('question'), option('query')].filter(Boolean).join(' '));
                 await replies.send(interaction, result, { refresh, showStop, includeLinks });
                 logger.debug?.('Command completed', { command: interaction.commandName, durationMs: Date.now() - started });
             } finally { active--; }

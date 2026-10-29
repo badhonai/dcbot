@@ -31,7 +31,7 @@ test('formatting long paragraphs preserves sentence text and links while adding 
  assert.ok(r.includes('\n\n')); assert.match(r, /https:\/\/example.com\/docs/); assert.equal(r.replace(/\s+/g, ' ').trim(), text.trim());
 });
 test('respect and link opt-out apply together without touching numbers or pair identifiers', () => {
- const r = presentAnswer('tui BTC/USDT 123.45 dekh. [Source](https://example.com)'); assert.match(r, /tumi BTC\/USDT 123\.45/); assert.ok(!r.includes('https://'));
+ const r = presentAnswer('tui BTC/USDT 123.45 dekh. [Source](https://example.com)', { includeLinks: false }); assert.match(r, /tumi BTC\/USDT 123\.45/); assert.ok(!r.includes('https://'));
 });
 test('Discord splitter preserves all plain text and does not split a requested masked link', () => {
  const link = '[Documentation](<https://example.com/docs>)'; const text = 'intro '.repeat(20) + link + '\n\n' + 'details '.repeat(50);
@@ -73,20 +73,20 @@ test('long default response is summarized once; requested detailed response keep
  assert.match(await completeAnswer(draft, options), /Summary/); assert.equal(n, 1);
  assert.equal(await completeAnswer(draft, { ...options, input: 'Give a detailed explanation' }), draft); assert.equal(n, 1);
 });
-test('agent omits links by default even after research, but retains them when explicitly requested', async () => {
+test('agent includes short source links by default and respects explicit link opt-outs', async () => {
  for (const ask of [false, true]) {
   let n = 0; const agent = createAgent({ logger: quiet, config: {}, actions: { execute: async () => ({ results: [{ url: 'https://example.com/real', content: 'A fact' }] }) }, client: sdk(async () => ++n === 1 ? { choices: [{ message: { tool_calls: [{ id: 's', function: { name: 'web_search', arguments: '{"query":"project"}' } }] } }] } : done('A sourced fact. [Guide](https://example.com/real)')) });
-  const r = await agent.respond('Research the project' + (ask ? ' and show source links' : '')); assert.equal(r.includes('https://example.com/real'), ask); assert.equal(r.includes('Sources:'), ask);
+  const r = await agent.respond('Research the project' + (ask ? ' and show source links' : ' without links')); assert.equal(r.includes('https://example.com/real'), ask); assert.equal(r.includes('Sources:'), ask);
  }
 });
 test('agent repairs real finish_reason length and applies respect after rewriting', async () => {
  let n = 0; const agent = createAgent({ config: {}, actions: {}, logger: quiet, client: sdk(async () => ++n === 1 ? done('Bhai tui shon, eta holo', 'length') : done('Bhai, tui ektu dekho.\n\n- Eta shohoj kore bujhte paro.')) });
  const r = await agent.respond('Bhai eta bujhao'); assert.equal(n, 2); assert.match(r, /tumi/); assert.ok(!/\btui\b/.test(r));
 });
-test('private structured cards hide URL fields and empty link fields by default without mutating evidence', async t => {
+test('private structured cards respect explicit link opt-out without mutating evidence', async t => {
  const replies = new PrivateReplies(); t.after(() => replies.destroy()); let payload;
  const input = { pages: [{ title: 'Coin', description: 'Info', url: 'https://example.com', fields: [{ name: 'Links', value: 'https://example.com' }, { name: 'Supply', value: '123' }] }] };
- await replies.send({ user: { id: 'u' }, editReply: async p => { payload = p; }, deleteReply: async () => {} }, input);
+ await replies.send({ user: { id: 'u' }, editReply: async p => { payload = p; }, deleteReply: async () => {} }, input, { includeLinks: false });
  assert.equal(payload.embeds[0].url, undefined); assert.equal(payload.embeds[0].fields.length, 1); assert.equal(input.pages[0].url, 'https://example.com');
 });
 test('requested links survive private refresh with the same per-result policy', async t => {
@@ -99,7 +99,10 @@ test('requested links survive private refresh with the same per-result policy', 
 test('a long requested link switches private text rendering instead of clipping inside an embed', async t => {
  const replies = new PrivateReplies(); t.after(() => replies.destroy()); let payload;
  const url = 'https://example.com/' + 'a'.repeat(1300);
- await replies.send({ user: { id: 'u' }, editReply: async p => { payload = p; }, deleteReply: async () => {} }, `[Link](<${url}>)`, { includeLinks: true });
+ const i = { user: { id: 'u' }, editReply: async p => { payload = p; }, deleteReply: async () => {} };
+ const id = await replies.send(i, `[Link](<${url}>)`, { includeLinks: true });
+ assert.ok(payload.content.length < 400);
+ await replies.onButton({ customId: `private:${id}:more`, user: i.user, deferUpdate: async () => {} });
  assert.equal(payload.embeds.length, 0); assert.ok(payload.content.includes(url)); assert.ok(payload.content.length <= 2000);
 });
 test('Ollama honors larger bounded repair budget while retaining configured reasoning headroom', async () => {

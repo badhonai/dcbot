@@ -32,11 +32,13 @@ test('single-card replies show only Dismiss, no redundant navigation', async t =
 test('multi-card results navigate whole cards without slicing records', async t => {
     const replies = new PrivateReplies(); t.after(() => replies.destroy());
     const i = interaction(); const id = await replies.send(i, pages(card('Pool A', 'first'), card('Pool B', 'second')));
-    assert.equal(i.edits[0].embeds[0].title, 'Pool A');
-    assert.equal(i.edits[0].components[0].components.length, 3);
+    assert.ok(i.edits[0].content.length < 400);
+    assert.equal(i.edits[0].components[0].components[0].data.label, 'More');
+    await replies.onButton({ customId: `private:${id}:more`, user: i.user, deferUpdate: async () => {} });
+    assert.equal(i.edits[1].embeds[0].title, 'Pool A');
     await replies.onButton({ customId: `private:${id}:next`, user: i.user, deferUpdate: async () => {} });
-    assert.equal(i.edits[1].embeds[0].title, 'Pool B');
-    assert.match(i.edits[1].embeds[0].footer.text, /2\/2/);
+    assert.equal(i.edits[2].embeds[0].title, 'Pool B');
+    assert.match(i.edits[2].embeds[0].footer.text, /2\/2/);
 });
 test('numbers and dates stay concise without inventing missing values', () => {
     assert.equal(compactMoney(1234567890), '$1.23B');
@@ -66,7 +68,7 @@ test('missing Embed Links permission falls back to bounded private text', async 
     const i = interaction(); i.appPermissions = { has: () => false };
     await replies.send(i, HELP);
     assert.equal(i.edits[0].embeds.length, 0);
-    assert.match(i.edits[0].content, /Command guide/); assert.ok(i.edits[0].content.length < 2000);
+    assert.match(i.edits[0].content, /All results are private/); assert.ok(i.edits[0].content.length < 2000);
 });
 
 test('slash picker descriptions are short and network/term options use dropdowns', () => {

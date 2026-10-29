@@ -3,7 +3,7 @@ const { randomBytes } = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
 const { quoteMoney } = require('../features/market');
-const { splitMessage } = require('../utils/split-message');
+const { splitDiscordMessage: splitMessage } = require('../utils/split-message');
 const safeMentions = { parse: [], repliedUser: false };
 class PublicControls {
     constructor({ preferences, actions, boundaries, now = Date.now, logger = { warn() {} } }) {

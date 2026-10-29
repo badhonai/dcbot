@@ -1,6 +1,6 @@
 {
   "name": "discord-ai-bot",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Lightweight read-only Discord community agent with crypto research and games",
   "main": "src/index.js",
   "scripts": {

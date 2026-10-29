@@ -135,3 +135,7 @@ Added explicit Bangla-script, Banglish-Latin and English turn selection with sho
 ## Community production-focused release 1.1.0
 
 Added seven community slash/AI workflows (`coin`, `compare`, `trending`, `x`/`x_research`, `news`, `fun`, `answer`), bringing each registry to 19 entries. No runtime dependencies or new personal data stores. User explicitly excluded personal-assistant features and social post/announcement drafting. Existing consent controls remain intact. See [COMMUNITY-RELEASE.md](COMMUNITY-RELEASE.md) for upstream-review scope and validation; [PRODUCTION.md](PRODUCTION.md) documents the remaining deployment checks. Historical test counts and older deployment notes above describe earlier releases, not this release's live status.
+
+## Reply presentation patch 1.1.1
+
+Respectful tumi/apni phrasing with occasional safe banter; links only on explicit request, including private card filtering; summary-first Discord Markdown blocks; Markdown-aware public/private splitting; removal of silent final-answer clipping; bounded completion/summarization repair on cutoffs/oversize responses. Default token headroom increased without changing dependencies or hosting footprint. 301 offline tests pass. See README's 1.1.1 section for limits and retry behavior. This supersedes older notes about automatic source-link footers.

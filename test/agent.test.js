@@ -40,7 +40,7 @@ test('AI interprets the actual question instead of a token-name shortcut', async
 });
 test('agent can search, read, then synthesize with actual sources', async () => {
     const f = fixture([tools(call('web_search', { query: 'project update' })), tools(call('read_page', { url: 'https://example.com/news' })), response('The source reports a project update. [Read it](https://example.com/news)')]);
-    const answer = await f.agent.respond('Find and summarize the latest project update');
+    const answer = await f.agent.respond('Find and summarize the latest project update and include source links');
     assert.deepEqual(f.executed.map(i => i.command), ['web_search', 'read_page']);
     assert.match(answer, /Sources:/); assert.match(answer, /https:\/\/example.com\/news/);
     assert.equal(f.requests[2].request.messages.filter(m => m.role === 'tool').length, 2);

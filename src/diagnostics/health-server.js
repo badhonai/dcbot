@@ -1,4 +1,5 @@
 const http = require('node:http');
+const { version } = require('../../package.json');
 function healthPort(env = process.env) {
     const value = env.HEALTH_PORT ?? env.PORT ?? env.SERVER_PORT ?? '25031';
     if (!/^\d+$/.test(String(value)) || Number(value) > 65535) throw new Error('Invalid health port');
@@ -27,7 +28,7 @@ function createHealthServer({ checkPrice, checkAi, checkAgentPrice, discordReady
         try { route = new URL(request.url, 'http://health.invalid').pathname; } catch { route = ''; }
         let status = 200; let body;
         if (!['GET', 'HEAD'].includes(request.method)) { status = 405; response.setHeader('Allow', 'GET, HEAD'); body = { error: 'method_not_allowed' }; }
-        else if (['/', '/health', '/healthz'].includes(route)) body = { status: 'ok', service: 'discord-info-bot', diagnosticsVersion: 3, runtime: { rssMb: Math.round(process.memoryUsage().rss / 1048576), heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1048576), uptimeSeconds: Math.floor(process.uptime()) }, discord: discordReady() ? 'connected' : 'disconnected', routes: ['/healthz', '/readyz', '/health/price', '/diagnostics'] };
+        else if (['/', '/health', '/healthz'].includes(route)) body = { status: 'ok', service: 'discord-info-bot', diagnosticsVersion: 3, release: version, runtime: { rssMb: Math.round(process.memoryUsage().rss / 1048576), heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1048576), uptimeSeconds: Math.floor(process.uptime()) }, discord: discordReady() ? 'connected' : 'disconnected', routes: ['/healthz', '/readyz', '/health/price', '/diagnostics'] };
         else if (route === '/diagnostics' || route === '/readyz') {
             const ready = discordReady() && state.price.status === 'ok' && ['ok', 'not_configured', 'not_checked'].includes(state.ai.status) && ['ok', 'not_configured', 'not_checked'].includes(state.agentPrice.status);
             if (route === '/readyz' && !ready) status = 503;

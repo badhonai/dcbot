@@ -16,5 +16,5 @@
   "requestTimeoutMs": 30000,
   "naturalLanguageCommands": true,
   "fallbackModel": "qwen/qwen3.8-27b",
-  "primaryMaxTokens": 1024
+  "primaryMaxTokens": 2048
 }

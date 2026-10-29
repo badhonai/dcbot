@@ -1,7 +1,8 @@
+const { presentAnswer } = require('../conversation/reply-presentation');
 const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { randomBytes } = require('node:crypto');
-const { splitMessage } = require('../utils/split-message');
+const { splitDiscordMessage: splitMessage } = require('../utils/split-message');
 const { card } = require('../utils/cards');
 const safeMentions = { parse: [], repliedUser: false };
 class PrivateReplies {
@@ -26,25 +27,39 @@ class PrivateReplies {
         return { content: '', embeds: [{ ...current, footer: { text: [current.footer?.text, status].filter(Boolean).join(' · ').slice(0, 300) } }],
             components: this.controls(id, session.page, session.pages.length, session), allowedMentions: safeMentions };
     }
-    makePages(interaction, text) {
+    makePages(interaction, text, { includeLinks = false } = {}) {
+        let forcePlain = false;
+        if (text?.pages) text = { ...text, pages: text.pages.map(page => {
+            const copy = { ...page };
+            for (const key of ['title', 'description']) if (copy[key]) copy[key] = presentAnswer(copy[key], { includeLinks });
+            if (copy.fields) copy.fields = copy.fields.map(f => ({ ...f, value: presentAnswer(f.value, { includeLinks }) })).filter(f => f.value.trim());
+            if (!includeLinks) { delete copy.url; delete copy.image; delete copy.thumbnail; }
+            if (copy.footer?.text) copy.footer = { ...copy.footer, text: presentAnswer(copy.footer.text, { includeLinks }) };
+            return copy;
+        }) };
+        else text = presentAnswer(String(text || 'No results.'), { includeLinks });
+        const wide = typeof text === 'string' && [...text.matchAll(/\[[^\]\n]+\]\([^\n]+?\)|`[^`\n]+`|https?:\/\/[^\s<>]+/g)].some(m => m[0].length > 850);
+        let stringPages;
+        if (typeof text === 'string') { stringPages = splitMessage(text, wide ? 1800 : 900); forcePlain = stringPages.some(s => s.length > 1200); }
+
         let pages = Array.isArray(text?.pages) && text.pages.length ? text.pages.slice(0, 20) :
-            splitMessage(String(text || 'No results.').slice(0, 20000), 900).map(value => card('AI assistant', value));
-        const plain = interaction.appPermissions?.has(PermissionFlagsBits.EmbedLinks) === false;
+            (stringPages || splitMessage('No results.', 900)).map(value => forcePlain ? { text: value } : card('AI assistant', value));
+        const plain = forcePlain || interaction.appPermissions?.has(PermissionFlagsBits.EmbedLinks) === false;
         if (plain) pages = pages.flatMap(page => {
-            const body = [`**${page.title}**`, page.description, ...(page.fields || []).map(f => `**${f.name}**\n${f.value}`), page.url ? `[Source](${page.url})` : '', page.footer?.text, page.timestamp ? `Fetched: ${page.timestamp}` : ''].filter(Boolean).join('\n\n');
-            return splitMessage(body, 1600).map(text => ({ text }));
+            const body = page.text || [`**${page.title}**`, page.description, ...(page.fields || []).map(f => `**${f.name}**\n${f.value}`), page.url ? `[Source](${page.url})` : '', page.footer?.text, page.timestamp ? `Fetched: ${page.timestamp}` : ''].filter(Boolean).join('\n\n');
+            return splitMessage(body, 1800).map(text => ({ text }));
         });
         return { pages, plain };
     }
-    async send(interaction, text, { refresh, showStop = false } = {}) {
+    async send(interaction, text, { refresh, showStop = false, includeLinks = false } = {}) {
         if (this.sessions.size >= this.maxSessions) {
             const [oldId, old] = this.sessions.entries().next().value;
             clearTimeout(old.timer); this.sessions.delete(oldId);
             old.interaction.deleteReply().catch(() => {});
         }
         const id = randomBytes(12).toString('hex');
-        const { pages, plain } = this.makePages(interaction, text);
-        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction, refresh, showStop, refreshAfter: 0 };
+        const { pages, plain } = this.makePages(interaction, text, { includeLinks });
+        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction, refresh, showStop, includeLinks, refreshAfter: 0 };
         this.sessions.set(id, session);
         session.timer = setTimeout(() => {
             this.sessions.delete(id);
@@ -78,7 +93,7 @@ class PrivateReplies {
                 try { result = await session.refresh(); }
                 catch { result = { pages: [card('Refresh unavailable', 'Could not fetch recent data. Please try again shortly.')] }; }
                 if (this.sessions.get(id) !== session) return;
-                Object.assign(session, this.makePages(session.interaction, result), { page: 0, refreshing: false });
+                Object.assign(session, this.makePages(session.interaction, result, { includeLinks: session.includeLinks }), { page: 0, refreshing: false });
                 await session.interaction.editReply(cleanDiscordPayload(this.payload(id, session)));
             } finally { session.refreshing = false; }
             return;

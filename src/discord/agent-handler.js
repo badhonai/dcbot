@@ -2,7 +2,7 @@ const { localizeFixed } = require('../conversation/language');
 const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
-const { splitMessage } = require('../utils/split-message');
+const { splitDiscordMessage: splitMessage } = require('../utils/split-message');
 const { createLogger, errorDetails } = require('../utils/logger');
 const safeMentions = { parse: [], repliedUser: false };
 function looksLikeRequest(text) {

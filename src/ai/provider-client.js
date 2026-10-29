@@ -62,7 +62,7 @@ function createOllamaClient({ apiKey, timeoutMs = 30000, maxTokens = 1024, fetch
         const body = {
             model: request.model, messages: request.messages, stream: false,
             temperature: request.temperature ?? 0.2,
-            max_tokens: maxTokens,
+            max_tokens: Math.min(8192, Math.max(maxTokens, Number.isInteger(request.max_completion_tokens) ? request.max_completion_tokens : 0)),
             reasoning_effort: 'low',
             ...(request.tools ? { tools: request.tools } : {}),
         };

@@ -1,3 +1,4 @@
+const { wantsLinks } = require('../conversation/reply-presentation');
 const { localizeFixed } = require('../conversation/language');
 const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
@@ -117,7 +118,8 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                     for (const intent of priceIntents.values()) results.push(...(await actions.execute(intent)).pages);
                     return pages(results);
                 } : undefined;
-                await replies.send(interaction, result, { refresh, showStop });
+                const includeLinks = interaction.commandName === 'official' || wantsLinks([option('message'), option('question'), option('query')].filter(Boolean).join(' '));
+                await replies.send(interaction, result, { refresh, showStop, includeLinks });
                 logger.debug?.('Command completed', { command: interaction.commandName, durationMs: Date.now() - started });
             } finally { active--; }
         } catch (error) {

@@ -34,9 +34,9 @@ test('agent receives the actual sanitized display name without mixing users', as
     await agent.respond('বাংলায় বলো', { sessionKey: 'a:1', profile: { displayName: 'রাহিম', locale: 'bn' } });
     await agent.respond('Hola', { sessionKey: 'a:2', profile: { displayName: 'María', locale: 'es-ES' } });
     assert.ok(requests[0].messages.some(message => message.content.includes('রাহিম')));
-    assert.ok(requests[1].messages.some(message => message.content.includes('María')));
-    assert.ok(!requests[1].messages.some(message => message.content.includes('রাহিম')));
-    assert.ok(requests[0].messages[0].content.includes('Light, affectionate teasing'));
+    assert.ok(requests.at(-1).messages.some(message => message.content.includes('María')));
+    assert.ok(!requests.at(-1).messages.some(message => message.content.includes('রাহিম')));
+    assert.ok(requests[0].messages[0].content.includes('light, affectionate teasing'));
 });
 test('public messages pass member display name to the AI', async () => {
     let profile;

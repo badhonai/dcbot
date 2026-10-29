@@ -1,3 +1,4 @@
+const { localizeFixed } = require('../conversation/language');
 const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
@@ -42,11 +43,11 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                     const observe = onTool => (intent, output) => {
                         if (intent.command !== 'report_direct_abuse' || !boundaries || !message.id) { onTool?.(intent, output); return; }
                         const decision = boundaries.record(message.author.id, message.id, input, intent.args.evidence);
-                        onTool?.(intent, { ...output, boundaryNotice: decision?.paused ? decision.reply : undefined });
+                        onTool?.(intent, { ...output, boundaryNotice: decision?.paused ? localizeFixed(decision.reply, agent.languageFor?.(input, sessionKey) || 'auto') : undefined });
                         return decision ? { boundaryReply: decision.reply } : undefined;
                     };
                     if (controls) {
-                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, profile, onProgress, signal, onTool: observe(onTool) }), config.maxResponseLength || 1900);
+                        await controls.run(message, (onProgress, signal, onTool) => agent.respond(input, { sessionKey, reference, profile, onProgress, signal, onTool: observe(onTool) }), config.maxResponseLength || 1900, { language: agent.languageFor?.(input, sessionKey) });
                         return;
                     }
                     const response = await agent.respond(input, { sessionKey, reference, profile, onTool: observe() });

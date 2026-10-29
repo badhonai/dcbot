@@ -1,3 +1,4 @@
+const { localizeFixed } = require('../conversation/language');
 const { discordProfile } = require('../conversation/personality');
 const { replyClean } = require('../utils/clean-output');
 const { MessageFlags } = require('discord.js');
@@ -72,7 +73,7 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
                 const onTool = (intent, output) => {
                     if (intent.command === 'report_direct_abuse' && boundaries && interaction.id) {
                         const decision = boundaries.record(interaction.user.id, interaction.id, option('message') || '', intent.args.evidence);
-                        if (decision?.paused) boundaryNotice = decision.reply;
+                        if (decision?.paused) boundaryNotice = localizeFixed(decision.reply, agent?.languageFor?.(option('message') || '', `private:${interaction.channelId}:${interaction.user.id}`) || 'auto');
                         return decision ? { boundaryReply: decision.reply } : undefined;
                     }
                     if (intent.command === 'price') priceIntents.set(JSON.stringify(intent.args), intent);

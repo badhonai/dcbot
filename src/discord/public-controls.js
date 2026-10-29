@@ -1,3 +1,4 @@
+const { detectLanguage, localizeFixed } = require('../conversation/language');
 const { randomBytes } = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { cleanDiscordPayload, replyClean } = require('../utils/clean-output');
@@ -18,16 +19,16 @@ class PublicControls {
         if (state.stopRequested) buttons.push(new ButtonBuilder().setCustomId(`agent:${id}:stop`).setLabel('Stop replies to me').setStyle(ButtonStyle.Secondary));
         return buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
     }
-    async run(message, task, maxLength = 1900) {
+    async run(message, task, maxLength = 1900, { language } = {}) {
         const owner = message.author.id;
         if (this.preferences.isMuted(owner) || this.boundaries?.pausedUntil(owner)) return;
         for (const [key, state] of this.sessions) if (state.expires <= this.now()) this.sessions.delete(key);
         if (this.sessions.size >= 200) this.sessions.delete(this.sessions.keys().next().value);
         const id = randomBytes(12).toString('hex');
-        const state = { owner, task, message, maxLength, messages: [], prices: new Map(), stopRequested: false, busy: true, expires: this.now() + 600000 };
+        const state = { language: language || detectLanguage(message.content), owner, task, message, maxLength, messages: [], prices: new Map(), stopRequested: false, busy: true, expires: this.now() + 600000 };
         this.sessions.set(id, state);
         try {
-            state.messages.push(await replyClean(message, { content: 'Thinking and checking...', components: this.components(id, state), flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
+            state.messages.push(await replyClean(message, { content: localizeFixed('Thinking and checking...', state.language), components: this.components(id, state), flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
             await this.execute(id, state);
         } catch (error) { this.sessions.delete(id); throw error; }
     }
@@ -35,7 +36,7 @@ class PublicControls {
         const revision = this.preferences.revision(state.owner);
         state.abort = new AbortController();
         const valid = () => !this.preferences.isMuted(state.owner) && revision === this.preferences.revision(state.owner) && (!this.boundaries?.pausedUntil(state.owner) || Boolean(state.boundaryNotice && text === state.boundaryNotice));
-        const edit = payload => state.messages[0].edit(cleanDiscordPayload({ ...payload, flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
+        const edit = payload => state.messages[0].edit(cleanDiscordPayload({ ...payload, ...(payload.content ? { content: localizeFixed(payload.content, state.language) } : {}), flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions }));
         let text;
         try {
             if (!valid()) throw new Error('Request stopped');
@@ -75,7 +76,7 @@ class PublicControls {
         const chunks = splitMessage(text || 'No answer available.', Math.min(state.maxLength, 1900));
         for (let i = 0; i < chunks.length; i++) {
             if (!valid()) return;
-            const payload = cleanDiscordPayload({ content: chunks[i], components: i === 0 ? this.components(id, state) : [], flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
+            const payload = cleanDiscordPayload({ content: localizeFixed(chunks[i], state.language), components: i === 0 ? this.components(id, state) : [], flags: MessageFlags.SuppressEmbeds, allowedMentions: safeMentions });
             if (state.messages[i]) await state.messages[i].edit(payload);
             else state.messages.push(await state.message.reply(payload));
         }
@@ -105,7 +106,7 @@ class PublicControls {
         this.cooldowns.set(state.owner, this.now() + 5000);
         try {
             await interaction.deferUpdate();
-            await state.messages[0].edit(cleanDiscordPayload({ content: 'Checking again...', components: this.components(id, state) }));
+            await state.messages[0].edit(cleanDiscordPayload({ content: localizeFixed('Checking again...', state.language), components: this.components(id, state) }));
             await this.execute(id, state, true);
         } finally { state.busy = false; }
     }

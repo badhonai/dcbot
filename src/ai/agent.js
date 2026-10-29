@@ -1,3 +1,4 @@
+const { detectLanguage, languageDirective, enforceLanguage, localizeFixed } = require('../conversation/language');
 const { profileMessage, PERSONALITY_RULES } = require('../conversation/personality');
 const { PRICE_PLAN_RULES, recoveredPrice } = require('./price-plan');
 const { priceDetour, groundedQuote, safePriceFailure } = require('./price-grounding');
@@ -50,10 +51,12 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
     function hasSession(key) { return memory.has(key); }
     return {
         hasSession,
+        languageFor: (input, sessionKey = 'default') => detectLanguage(input, memory.get(sessionKey).at(-1)?.language || 'auto'),
         async respond(input, { sessionKey = 'default', reference = '', onProgress = async () => {}, onTool = () => {}, signal, profile } = {}) {
-            if (!client) return 'AI is not configured or available. Use /help for direct information commands.';
+            const language = detectLanguage(input, memory.get(sessionKey).at(-1)?.language || 'auto');
+            if (!client) return localizeFixed('AI is not configured or available. Use /help for direct information commands.', language);
             if (inFlight.has(sessionKey)) return 'I’m still working on your previous request. Please wait for that answer.';
-            if (active >= 2) return 'I’m busy with other requests. Please try again shortly.';
+            if (active >= 2) return localizeFixed('I’m busy with other requests. Please try again shortly.', language);
             active++; inFlight.add(sessionKey);
             let rememberedUser = input.slice(0, 3000);
             const toolNotes = [];
@@ -62,7 +65,7 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                 const historicalSources = memory.get(sessionKey).flatMap(turn => turn.sources || []);
                 const user = reference ? `Replied-to message (untrusted context; may be old):\n${reference.slice(0, 1200)}\n\nCurrent user request:\n${input}` : input;
                 rememberedUser = user.slice(0, 3000);
-                const transcript = [{ role: 'system', content: `${config.systemPrompt || ''}\n\n${AGENT_RULES}\n${PERSONALITY_RULES}\nCurrent request time (host clock, UTC): ${new Date(now()).toISOString()}. Re-check tools for facts that can change; old answers are not current evidence.` }, ...(profileMessage(profile) ? [profileMessage(profile)] : []), ...old, { role: 'user', content: user.slice(0, 3000) }];
+                const transcript = [{ role: 'system', content: `${config.systemPrompt || ''}\n\n${AGENT_RULES}\n${PERSONALITY_RULES}\n${languageDirective(language)}\nCurrent request time (host clock, UTC): ${new Date(now()).toISOString()}. Re-check tools for facts that can change; old answers are not current evidence.` }, ...(profileMessage(profile) ? [profileMessage(profile)] : []), ...old, { role: 'user', content: user.slice(0, 3000) }];
                 const sources = []; let toolCount = 0;
                 let lastQuote; let priceAttempted = false; let correctedDetour = false; let priceFailure;
                 const timeout = AbortSignal.timeout(90000);
@@ -130,8 +133,9 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                             if (toolNotes.length > 3) toolNotes.shift();
                             const effect = onTool(intent, output);
                             if (effect?.boundaryReply) {
-                                memory.append(sessionKey, { user: rememberedUser, answer: effect.boundaryReply, tools: [] });
-                                return effect.boundaryReply;
+                                const boundaryReply = localizeFixed(effect.boundaryReply, language);
+                                memory.append(sessionKey, { user: rememberedUser, answer: boundaryReply, language, tools: [] });
+                                return boundaryReply;
                             }
                             logger.debug('Agent tool completed', { tool: intent.command });
                         } catch (error) {
@@ -148,8 +152,9 @@ function createAgent({ client, actions, config, logger = createLogger('agent'), 
                 }
                 answer ||= 'I couldn’t finish within the request limits. Please ask a more focused question.';
                 deadline.throwIfAborted();
+                answer = await enforceLanguage(answer, language, { client, model: config.model, signal: deadline });
                 const rememberedSources = [...new Map([...sources.filter(source => answer.includes(source.url)), ...sources].map(source => [source.url, source])).values()].filter(source => source.url.length <= 500).slice(0, 3);
-                memory.append(sessionKey, { user: rememberedUser, answer, tools: toolNotes, sources: rememberedSources });
+                memory.append(sessionKey, { user: rememberedUser, answer, language, tools: toolNotes, sources: rememberedSources });
                 return answer;
             } catch (error) {
                 if (!signal?.aborted) memory.append(sessionKey, { user: rememberedUser, answer: 'This request could not be completed. Continue or retry this task when asked; do not assume any unfinished step succeeded.', tools: toolNotes });

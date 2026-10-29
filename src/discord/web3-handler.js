@@ -7,27 +7,45 @@ const { card, pages, notice, clip } = require('../utils/cards');
 const HELP = pages(
     card('Command guide', 'Choose a command below. All results are private.', { fields: [
         { name: 'AI & web', value: '`/chat` Ask or give a small task\n`/search` Search with sources\n`/read` Read a webpage' },
-        { name: 'Markets', value: '`/price` Fresh exchange quote\n`/pair` Pools & liquidity\n`/newpairs` Recent pools (unverified)' },
+        { name: 'Markets', value: '`/price` Recent CoinGecko quote\n`/pair` Pools & liquidity\n`/newpairs` Recent pools (unverified)' },
         { name: 'Project & learning', value: '`/ask` Search approved docs\n`/official` Project links\n`/explain` Web3 glossary' },
+        { name: 'Your replies', value: '`/stop` Mute automatic replies to you\n`/start` Turn them back on' },
         { name: 'Try it', value: '`/price token:BTC`\n`/explain term:slippage`' },
     ] }),
     card('Good to know', '', { fields: [
         { name: 'Privacy', value: 'Slash results: only you. Dismiss anytime. Auto-deletion is best effort while online.\nNormal @mention replies are public.' },
         { name: 'Networks', value: 'Ethereum · Solana · Base · BSC\nArbitrum · Polygon · Optimism · Avalanche' },
-        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Live quotes: Coinbase / Kraken. Other data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
+        { name: 'Sources & limits', value: 'CoinPaprika · DEX Screener · GeckoTerminal. Quotes: CoinGecko (free API ~60s updates); exchange mode: Coinbase / Kraken. Other data may lag.\nProject docs are owner-approved. No trading, wallet access or moderation. Pools are not safety-checked.' },
     ] }),
 );
-function createWeb3Handler({ config, market, knowledge, replies, actions, agent, logger = createLogger('commands') }) {
+function createWeb3Handler({ config, market, knowledge, replies, actions, agent, preferences, controls, logger = createLogger('commands') }) {
     const cooldowns = new Map(); let active = 0;
     return async function onInteraction(interaction) {
         try {
+            if (interaction.isButton?.() && interaction.customId.startsWith('agent:')) {
+                try { if (controls) await controls.onButton(interaction); }
+                catch (error) {
+                    logger.error('Reply control failed', errorDetails(error));
+                    const payload = { content: 'Could not update that control. Try /start or /stop, or ask again.', flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } };
+                    try {
+                        if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
+                        else await replyClean(interaction, payload);
+                    } catch { /* Never send a public fallback for a failed control. */ }
+                }
+                return;
+            }
             if (interaction.isButton?.() && interaction.customId.startsWith('private:')) {
                 await replies.onButton(interaction); return;
             }
             if (!interaction.isChatInputCommand()) return;
-            if (!['chat','search','read','help','ask','official','price','pair','newpairs','explain'].includes(interaction.commandName)) return;
+            if (!['start','stop','chat','search','read','help','ask','official','price','pair','newpairs','explain'].includes(interaction.commandName)) return;
             // Acknowledge privately BEFORE external work. Every result/error stays on this interaction.
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            if (['start', 'stop'].includes(interaction.commandName)) {
+                if (!preferences) throw new Error('Preferences unavailable');
+                preferences.setMuted(interaction.user.id, interaction.commandName === 'stop');
+                await replies.send(interaction, interaction.commandName === 'stop' ? 'Automatic replies stopped for you. Use /start to resume.' : 'Automatic replies are on again for you.'); return;
+            }
             if (!config.channels.includes(interaction.channelId)) {
                 await replies.send(interaction, notice('Use a bot channel', 'Commands are enabled in the configured channels only.')); return;
             }
@@ -43,28 +61,33 @@ function createWeb3Handler({ config, market, knowledge, replies, actions, agent,
             const started = Date.now();
             try {
                 const option = name => interaction.options.getString(name);
-                let result;
-                if (interaction.commandName === 'chat') {
-                    result = agent ? await agent.respond(option('message'), { sessionKey: `private:${interaction.channelId}:${interaction.user.id}` }) : 'AI is not configured. Use /help for direct commands.';
-                } else if (interaction.commandName === 'search') {
-                    const found = await actions.execute({ command: 'web_search', args: { query: option('query') } });
-                    result = found.results.length ? pages(found.results.map(item => card(item.title || 'Search result', clip(item.content, 650), { url: item.url, footer: 'Web search snippet · Read the source for context' }))) : notice('No results', 'Try a different search query.');
-                } else if (interaction.commandName === 'read') {
-                    const found = await actions.execute({ command: 'read_page', args: { url: option('url') } });
-                    result = pages(card(found.title, clip(found.content || 'No readable text found.', 1000), { url: found.url, footer: 'Webpage excerpt · Use /chat to request a summary' }));
-                } else if (actions && interaction.commandName !== 'help') {
-                    const args = Object.fromEntries(Object.keys(SPECS[interaction.commandName].properties).map(name => [name, option(name)]).filter(([, value]) => value));
-                    result = await actions.execute({ command: interaction.commandName, args });
-                } else switch (interaction.commandName) {
-                    case 'help': result = HELP; break;
-                    case 'ask': result = knowledge.ask(option('project'), option('question')); break;
-                    case 'official': result = knowledge.official(option('project')); break;
-                    case 'price': result = await market.price(option('token'), { mode: option('mode') || 'live' }); break;
-                    case 'pair': result = await market.pair(option('chain'), option('address')); break;
-                    case 'newpairs': result = await market.newpairs(option('chain')); break;
-                    case 'explain': result = explain(option('term')); break;
-                }
-                await replies.send(interaction, result);
+                const execute = async () => {
+                    let result;
+                    if (interaction.commandName === 'chat') {
+                        result = agent ? await agent.respond(option('message'), { sessionKey: `private:${interaction.channelId}:${interaction.user.id}` }) : 'AI is not configured. Use /help for direct commands.';
+                    } else if (interaction.commandName === 'search') {
+                        const found = await actions.execute({ command: 'web_search', args: { query: option('query') } });
+                        result = found.results.length ? pages(found.results.map(item => card(item.title || 'Search result', clip(item.content, 650), { url: item.url, footer: 'Web search snippet · Read the source for context' }))) : notice('No results', 'Try a different search query.');
+                    } else if (interaction.commandName === 'read') {
+                        const found = await actions.execute({ command: 'read_page', args: { url: option('url') } });
+                        result = pages(card(found.title, clip(found.content || 'No readable text found.', 1000), { url: found.url, footer: 'Webpage excerpt · Use /chat to request a summary' }));
+                    } else if (actions && interaction.commandName !== 'help') {
+                        const args = Object.fromEntries(Object.keys(SPECS[interaction.commandName].properties).map(name => [name, option(name)]).filter(([, value]) => value));
+                        result = await actions.execute({ command: interaction.commandName, args });
+                    } else switch (interaction.commandName) {
+                        case 'help': result = HELP; break;
+                        case 'ask': result = knowledge.ask(option('project'), option('question')); break;
+                        case 'official': result = knowledge.official(option('project')); break;
+                        case 'price': result = await market.price(option('token'), { mode: option('mode') || 'live' }); break;
+                        case 'pair': result = await market.pair(option('chain'), option('address')); break;
+                        case 'newpairs': result = await market.newpairs(option('chain')); break;
+                        case 'explain': result = explain(option('term')); break;
+                    }
+                    return result;
+                };
+                const result = await execute();
+                const refresh = ['price', 'pair', 'newpairs', 'search', 'read'].includes(interaction.commandName) ? execute : undefined;
+                await replies.send(interaction, result, { refresh });
                 logger.debug?.('Command completed', { command: interaction.commandName, durationMs: Date.now() - started });
             } finally { active--; }
         } catch (error) {

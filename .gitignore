@@ -29,3 +29,5 @@ build/
 # Temporary files
 tmp/
 temp/
+# Local user opt-out preferences
+data/

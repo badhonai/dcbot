@@ -7,7 +7,7 @@
 | Primary | Ollama Cloud | `gpt-oss:120b` | `OLLAMA_API_KEY` |
 | Fallback | Groq | `qwen/qwen3.8-27b` | `GROQ_API_KEY` |
 
-The same model client serves normal agent chat and multi-step tool selection. Actual market prices still come from the exchange APIs, not either model. Public message replies stay public; slash-command privacy is unchanged.
+The same model client serves normal agent chat and multi-step tool selection. Actual prices come from CoinGecko by default (recent aggregate, not a tick feed), with an explicit Coinbase/Kraken exchange mode, never model memory. Public message replies stay public; slash-command privacy is unchanged.
 
 ## Enable on your host
 
@@ -46,3 +46,5 @@ The implementation was validated with mocked provider responses and the full off
 ## Agent web tools
 
 See [AI-first conversation and web limits](../README.md#ai-first-conversation-not-token-name-routing). `OLLAMA_API_KEY` is also used for the official `https://ollama.com/api/web_search` endpoint. Free-account search allowance is separate from model-provider fallback; there is no Groq search fallback. Protected public HTTPS page reading and the arithmetic parser do not require a search key. Tool decisions are AI-first, not the legacy deterministic router. Direct slash tools remain available without AI when their own dependencies permit.
+
+The agent receives current UTC time per request and can call `get_time` for an explicit timezone. Public Checking status is application-owned, not private chain-of-thought or a guarantee of correctness. Stop can cancel in-flight model/web calls through their abort signals; existing market calls retain their own timeout. Default prose is short, using the primary model and only the tool rounds actually needed rather than a second review-model pass.

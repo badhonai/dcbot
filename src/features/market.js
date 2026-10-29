@@ -1,3 +1,4 @@
+const { CoinGeckoQuotes } = require('./coingecko-quotes');
 const { LiveQuotes } = require('./live-quotes');
 const { card, pages, notice, safeText: plain, relativeTime } = require('../utils/cards');
 const CHAINS = {
@@ -21,13 +22,13 @@ function addressFor(chain, address) {
     if (!valid.test(address)) throw new Error('Invalid token address for this chain.');
 }
 class MarketService {
-    constructor(api, { liveQuotes = new LiveQuotes(api) } = {}) { this.api = api; this.liveQuotes = liveQuotes; }
+    constructor(api, { liveQuotes = new CoinGeckoQuotes(api) } = {}) { this.api = api; this.liveQuotes = liveQuotes; this.exchangeQuotes = new LiveQuotes(api); }
     async price(query, { mode = 'live' } = {}) {
-        if (mode === 'live') {
+        if (['live', 'coingecko', 'exchange'].includes(mode)) {
             try {
-                const quote = await this.liveQuotes.get(query);
+                const quote = await (mode === 'exchange' ? this.exchangeQuotes : mode === 'coingecko' ? new CoinGeckoQuotes(this.api) : this.liveQuotes).get(query);
                 return { ...pages(card(`${quote.symbol} · USD`, `**${money(quote.price)}**`, {
-                    url: quote.url, footer: `${quote.sourceLabel || quote.source} · Trade ${quote.ageSeconds}s ago · Fetched`, timestamp: quote.fetchedAt,
+                    url: quote.url, footer: `${quote.sourceLabel || quote.source} · ${quote.kind === 'aggregate' ? 'Updated' : 'Trade'} ${quote.ageSeconds}s ago${quote.kind === 'aggregate' ? ' · Free API ~60s updates' : ''} · Fetched`, timestamp: quote.fetchedAt,
                 })), quote };
             } catch (error) {
                 if (['LIVE_UNAVAILABLE', 'STALE_QUOTE'].includes(error.code)) return { ...notice('Live quote unavailable', error.message), liveUnavailable: true };

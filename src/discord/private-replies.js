@@ -5,32 +5,28 @@ const { splitMessage } = require('../utils/split-message');
 const { card } = require('../utils/cards');
 const safeMentions = { parse: [], repliedUser: false };
 class PrivateReplies {
-    constructor({ ttlMs = 10 * 60 * 1000, maxSessions = 200 } = {}) {
-        this.ttlMs = ttlMs; this.maxSessions = maxSessions; this.sessions = new Map();
+    constructor({ ttlMs = 10 * 60 * 1000, maxSessions = 200, preferences } = {}) {
+        this.preferences = preferences; this.ttlMs = ttlMs; this.maxSessions = maxSessions; this.sessions = new Map();
     }
-    controls(id, page, count) {
+    controls(id, page, count, session = {}) {
         const buttons = [];
         if (count > 1) buttons.push(
             new ButtonBuilder().setCustomId(`private:${id}:previous`).setLabel('Back').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
             new ButtonBuilder().setCustomId(`private:${id}:next`).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(page === count - 1),
         );
+        if (session.refresh) buttons.push(new ButtonBuilder().setCustomId(`private:${id}:refresh`).setLabel('Refresh').setStyle(ButtonStyle.Secondary).setDisabled(Boolean(session.refreshing)));
+        if (this.preferences) buttons.push(new ButtonBuilder().setCustomId(`private:${id}:stop`).setLabel(this.preferences.isMuted(session.owner) ? 'Replies stopped' : 'Stop replies to me').setStyle(ButtonStyle.Secondary).setDisabled(this.preferences.isMuted(session.owner)));
         buttons.push(new ButtonBuilder().setCustomId(`private:${id}:close`).setLabel('Dismiss').setStyle(ButtonStyle.Secondary));
         return [new ActionRowBuilder().addComponents(buttons)];
     }
     payload(id, session) {
         const current = session.pages[session.page];
         const status = [session.pages.length > 1 ? `${session.page + 1}/${session.pages.length}` : '', 'Only you', `~${Math.round(this.ttlMs / 60000)} min`].filter(Boolean).join(' · ');
-        if (session.plain) return { content: `${current.text}\n\n-# ${status}`, embeds: [], components: this.controls(id, session.page, session.pages.length), allowedMentions: safeMentions };
+        if (session.plain) return { content: `${current.text}\n\n-# ${status}`, embeds: [], components: this.controls(id, session.page, session.pages.length, session), allowedMentions: safeMentions };
         return { content: '', embeds: [{ ...current, footer: { text: [current.footer?.text, status].filter(Boolean).join(' · ').slice(0, 300) } }],
-            components: this.controls(id, session.page, session.pages.length), allowedMentions: safeMentions };
+            components: this.controls(id, session.page, session.pages.length, session), allowedMentions: safeMentions };
     }
-    async send(interaction, text) {
-        if (this.sessions.size >= this.maxSessions) {
-            const [oldId, old] = this.sessions.entries().next().value;
-            clearTimeout(old.timer); this.sessions.delete(oldId);
-            old.interaction.deleteReply().catch(() => {});
-        }
-        const id = randomBytes(12).toString('hex');
+    makePages(interaction, text) {
         let pages = Array.isArray(text?.pages) && text.pages.length ? text.pages.slice(0, 20) :
             splitMessage(String(text || 'No results.').slice(0, 20000), 900).map(value => card('AI assistant', value));
         const plain = interaction.appPermissions?.has(PermissionFlagsBits.EmbedLinks) === false;
@@ -38,7 +34,17 @@ class PrivateReplies {
             const body = [`**${page.title}**`, page.description, ...(page.fields || []).map(f => `**${f.name}**\n${f.value}`), page.url ? `[Source](${page.url})` : '', page.footer?.text, page.timestamp ? `Fetched: ${page.timestamp}` : ''].filter(Boolean).join('\n\n');
             return splitMessage(body, 1600).map(text => ({ text }));
         });
-        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction };
+        return { pages, plain };
+    }
+    async send(interaction, text, { refresh } = {}) {
+        if (this.sessions.size >= this.maxSessions) {
+            const [oldId, old] = this.sessions.entries().next().value;
+            clearTimeout(old.timer); this.sessions.delete(oldId);
+            old.interaction.deleteReply().catch(() => {});
+        }
+        const id = randomBytes(12).toString('hex');
+        const { pages, plain } = this.makePages(interaction, text);
+        const session = { pages, plain, page: 0, owner: interaction.user.id, interaction, refresh, refreshAfter: 0 };
         this.sessions.set(id, session);
         session.timer = setTimeout(() => {
             this.sessions.delete(id);
@@ -54,6 +60,27 @@ class PrivateReplies {
         const session = this.sessions.get(id);
         if (!session || session.owner !== interaction.user.id) {
             await replyClean(interaction, { content: 'This response expired or isn’t yours. Run the command again.', flags: MessageFlags.Ephemeral });
+            return;
+        }
+        if (action === 'stop' && this.preferences) {
+            await interaction.deferUpdate(); this.preferences.setMuted(session.owner, true);
+            await session.interaction.editReply(cleanDiscordPayload(this.payload(id, session))); return;
+        }
+        if (action === 'refresh' && session.refresh) {
+            if (session.refreshing || session.refreshAfter > Date.now()) {
+                await replyClean(interaction, { content: 'Already checking, or on cooldown. Try again shortly.', flags: MessageFlags.Ephemeral }); return;
+            }
+            session.refreshing = true; session.refreshAfter = Date.now() + 5000;
+            try {
+                await interaction.deferUpdate();
+                await session.interaction.editReply(cleanDiscordPayload({ content: 'Checking latest data...', embeds: [], components: this.controls(id, session.page, session.pages.length, session), allowedMentions: safeMentions }));
+                let result;
+                try { result = await session.refresh(); }
+                catch { result = { pages: [card('Refresh unavailable', 'Could not fetch recent data. Please try again shortly.')] }; }
+                if (this.sessions.get(id) !== session) return;
+                Object.assign(session, this.makePages(session.interaction, result), { page: 0, refreshing: false });
+                await session.interaction.editReply(cleanDiscordPayload(this.payload(id, session)));
+            } finally { session.refreshing = false; }
             return;
         }
         if (!['previous', 'next', 'close'].includes(action)) return;

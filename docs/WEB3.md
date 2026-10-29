@@ -1,4 +1,4 @@
-> **Current architecture:** production uses the AI-first bounded agent described in [README](../README.md#ai-first-conversation-not-token-name-routing), with ten private slash commands including `/chat`, `/search`, `/read`. Historical routing/follow-up sections below describe superseded releases. The legacy router remains only for compatibility tests; production never falls back to it.
+> **Current architecture:** production uses the AI-first bounded agent described in [README](../README.md#ai-first-conversation-not-token-name-routing), with twelve private slash commands including `/chat`, `/search`, `/read`, `/start`, `/stop`. Historical routing/follow-up sections below describe superseded releases. The legacy router remains only for compatibility tests; production never falls back to it.
 
 # Web3 implementation notes
 
@@ -89,3 +89,13 @@ Added a shared model client for both chat and tool selection. Default model is O
 Cooldown state is shared per process. API quota/credit errors, rate limits, authentication/access errors, missing models, transient errors, and empty completions trigger bounded fallback; schema errors do not. Failed providers are skipped until a later request can retry after cooldown. Recovery probes are coalesced and clean recovery is logged. Logs contain provider/reason/timing metadata, not raw error payloads, credentials, prompts or reasoning. No account-balance polling, paid credit purchase or automatic top-up is implemented; provider-side billing settings still control possible charges.
 
 Fifteen new offline tests cover primary choice, exhausted-credit fallback/cooldown, Retry-After, recovery, error classification, non-retryable schemas, reasoning-only responses, tool-call fallback/shared state, both providers down, Ollama payload compatibility, quota responses, malformed JSON, missing credentials and model/key configuration. Live authenticated Ollama and Groq calls were not tested because no AI credentials were supplied. See `AI_PROVIDERS.md` for deployment and policy details.
+
+## Current checking, personal controls and CoinGecko release
+
+Replaced the production default price source with CoinGecko recent aggregates (free API ~60-second updates, 120-second age cutoff). Exchange mode retains the original Coinbase/Kraken 30-second validation; no silent source fallback. Added a host-clock timezone tool/current-request timestamp, concise conversational instructions, and a single compact preferred citation.
+
+Public reply placeholders show safe checking/tool statuses before being edited into the answer. Owner-bound Refresh reruns a task; private data commands refresh their direct actions. Stop opts a user out globally and suppresses/cancels their pending public work where supported; `/start` resumes. Preferences persist atomically in ignored local `data/` storage. Buttons expire, have cooldowns and do not grant moderation permissions. See README for scope, deployment and cache caveats.
+
+An actual keyless CoinGecko BTC request succeeded in this workspace, returning a timestamp-validated aggregate aged 46 seconds. No real Discord rendering/clicks or authenticated Ollama/Groq calls were performed; those still require host-side staging checks. Offline tests cover price freshness/ambiguity, clock/timezones, scoped opt-out/restart persistence, in-flight cancellation, button ownership/expiry/cooldowns, long-message refresh, private refresh and command integration.
+
+Reference: https://docs.coingecko.com/reference/simple-price (free/Demo/keyless 60-second update frequency and `include_last_updated_at`).

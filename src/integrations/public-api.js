@@ -1,13 +1,13 @@
 const { createLogger } = require('../utils/logger');
 const { setTimeout: delay } = require('node:timers/promises');
 class PublicApi {
-    constructor({ fetchFn = fetch, now = Date.now, logger = createLogger('market-api') } = {}) {
-        this.logger = logger;
+    constructor({ fetchFn = fetch, now = Date.now, logger = createLogger('market-api'), coingeckoApiKey } = {}) {
+        this.logger = logger; this.coingeckoApiKey = coingeckoApiKey;
         this.fetch = fetchFn; this.now = now; this.cache = new Map(); this.pending = new Map(); this.next = new Map();
     }
     async get(url, ttl = 60000) {
         const host = new URL(url).hostname;
-        if (!['api.coinpaprika.com', 'api.dexscreener.com', 'api.geckoterminal.com', 'api.exchange.coinbase.com', 'api.kraken.com'].includes(host)) throw new Error('Unsupported provider');
+        if (!['api.coingecko.com', 'api.coinpaprika.com', 'api.dexscreener.com', 'api.geckoterminal.com', 'api.exchange.coinbase.com', 'api.kraken.com'].includes(host)) throw new Error('Unsupported provider');
         const hit = this.cache.get(url);
         if (ttl > 0 && hit && hit.expires > this.now()) { this.logger.debug?.('Cache hit', { provider: host }); return hit.value; }
         if (this.pending.has(url)) return this.pending.get(url);
@@ -17,7 +17,7 @@ class PublicApi {
         this.next.set(host, this.now() + wait + (host === 'api.exchange.coinbase.com' ? 300 : host === 'api.kraken.com' ? 1000 : 2500));
         const work = (async () => {
             if (wait) await delay(wait);
-            const response = await this.fetch(url, { signal: AbortSignal.timeout(12000), ...(ttl === 0 ? { cache: 'no-store' } : {}), headers: { Accept: 'application/json', 'User-Agent': 'dcbot-web3/1.0' } });
+            const response = await this.fetch(url, { redirect: 'error', signal: AbortSignal.timeout(12000), ...(ttl === 0 ? { cache: 'no-store' } : {}), headers: { Accept: 'application/json', 'User-Agent': 'dcbot-web3/1.0', ...(host === 'api.coingecko.com' && this.coingeckoApiKey ? { 'x-cg-demo-api-key': this.coingeckoApiKey } : {}) } });
             if (!response.ok) {
                 if (response.status === 404) this.logger.debug?.('Product not listed at provider', { provider: host });
                 else this.logger.warn('Provider request rejected', { provider: host, status: response.status, hint: response.status === 429 ? 'Cooling down for 60 seconds' : 'Retry later; check provider status' });

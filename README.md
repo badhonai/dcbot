@@ -6,13 +6,16 @@ An AI-first informational community member, **not a moderator**. No administrato
 
 | Command | Purpose |
 | --- | --- |
+| `/start` | Resume automatic replies to your messages |
+| `/stop` | Stop automatic replies to you (other users are unaffected) |
 | `/chat message:…` | Private AI help: explanations, drafting, translation, research and summaries |
 | `/search query:…` | Web search with sources (Ollama free-account allowance required) |
 | `/read url:https://…` | Read an excerpt from a public webpage |
 | `/help` | Commands, privacy, data sources and limitations |
 | `/ask question:… project:…` | Search curated project docs; return matching excerpts and sources |
 | `/official project:…` | Owner-approved project links |
-| `/price token:BTC` | Fresh exchange USD last-trade quote; no bot cache |
+| `/price token:BTC` | Recent CoinGecko USD aggregate quote; no bot price cache |
+| `/price token:BTC mode:exchange` | Fresh Coinbase/Kraken last trade (maximum age 30 seconds) |
 | `/price token:btc-bitcoin mode:market` | Delayed aggregate market stats from CoinPaprika |
 | `/pair chain:ethereum address:…` | Up to five base-token pools for a **token** contract, ordered by liquidity |
 | `/newpairs chain:solana` | Up to eight recently created pools; NOT verified new projects |
@@ -28,20 +31,32 @@ Pagination is owner-checked and process-local, so buttons expire on restart. The
 
 **Ordinary mentions/replies remain public.** Discord does not support ephemeral responses to normal messages. Use slash commands for private results.
 
-## Natural-language requests and fresh quotes
+## Natural-language requests and recent quotes
 
 In allowed channels, members can ask directly:
 
 ```text
-Member: whats the live btc price?
-Bot:    [typing…]
-Bot:    BTC: $80,532.63
-        Coinbase · trade 2s ago
+Member: whats the current btc price?
+Bot:    Thinking and checking
+Bot:    BTC: $80,532.63 · CoinGecko · updated 46s ago
+        [Refresh] [Stop replies to me]
 ```
 
-Illustrative value only. The displayed value comes from a fresh exchange request, never AI memory. The bot rejects trades older than 30 seconds, missing timestamps and invalid prices. If the exchange is unavailable, the product is unlisted, or trading is too quiet to meet the freshness check, it says so instead of presenting delayed data as live. A fresh REST request is **not** a tick-by-tick stream or a guaranteed executable price. The quote is a USD last trade from the named exchange (Coinbase first, Kraken fallback), not a market-wide average. Prices can change immediately afterward.
+Illustrative price only. CoinGecko is the default current-price source, using `/api/v3/simple/price` with `include_last_updated_at=true`. Common tickers map to explicit CoinGecko IDs. Other names/symbols use exact search matching and require clarification when ambiguous. Use a full CoinGecko ID for uncommon coins. Every price/refresh bypasses the bot price cache; only simultaneous identical requests may be coalesced. Provider-side caches still apply.
 
-Supported symbol requests are attempted as Coinbase `<SYMBOL>-USD` products, then Kraken USD trades if needed, with aliases for common names (Bitcoin/BTC, Ethereum/ETH, Solana/SOL, etc.). Not every token is listed. For broader coverage and aggregate statistics use `/price token:<CoinPaprika ID> mode:market`; that data is clearly marked as delayed and is never an automatic live-price fallback.
+**CoinGecko free/Demo/keyless prices update about every 60 seconds**, not tick-by-tick. The bot rejects missing/invalid/future timestamps, nonpositive prices, and quotes older than 120 seconds. This cutoff is a recent-aggregate policy, **not** a promise of a live trade or guaranteed executable price. Updated-at and fetched-at are separate. No remembered number or stale fallback is presented as current. Optional `COINGECKO_DEMO_API_KEY` is sent only to CoinGecko; keyless access can work but has shared-IP limitations. Free-account quotas may change. No Pro subscription is required.
+
+For a fresh exchange last trade, explicitly request one or use `/price token:BTC mode:exchange`: Coinbase first, Kraken fallback, with an actual trade no older than 30 seconds. For delayed broad market statistics, use `/price token:<CoinPaprika ID> mode:market`. These sources are labeled separately and are not silent replacements for CoinGecko. A fresh REST fetch cannot force an upstream provider to update.
+
+### Checking, refresh and personal opt-out
+
+Public requests first show a short **Thinking and checking** placeholder, then safe tool-status text such as **Checking the latest price**. The final answer replaces the placeholder; internal reasoning is never exposed. Slash commands use Discord's private deferred thinking state. Ordinary answers default to 1–3 short sentences, with one compact source link; detail is reserved for explicit requests. There is no extra model call just to produce a thinking paragraph, nor a forced web search for tasks that do not need current facts.
+
+Public **Refresh** reruns the original task against the tools; it does not replay a stored answer. Existing reply chunks are updated and obsolete chunks are removed. Private price/pair/discovery/search/read responses have a Refresh button that reruns their corresponding direct operation. Provider cache windows still apply (for example, pool/discovery data), so refresh does not guarantee changed values. Controls are owner-checked, rate-limited, process-local and expire after about 10 minutes or a restart; capacity eviction can expire them earlier.
+
+**Stop replies to me** or `/stop` disables automatic replies to that user in all servers, including mentions and follow-ups, without muting other members. `/start` restores them. The preference is stored atomically in ignored `data/reply-preferences.json`; keep this directory on persistent host storage to retain it across redeploys. `/start` and `/stop` work outside the bot's channel allowlist so users can always change their preference. Explicit slash commands remain available while stopped. Stop also cancels active model/web requests where supported and suppresses pending public answers; an already-sent network request cannot always be recalled. Market HTTP work may finish under its own timeout without producing a stopped user's reply.
+
+Each request receives the **current UTC host-clock timestamp** in its trusted context. The `get_time` tool formats current date/time for an explicit IANA timezone such as `Asia/Dhaka`; UTC is the fallback, not an assumed member location. Keep the host clock synchronized. The bot does not call a third-party time service just to obtain the current date.
 
 ### AI-first conversation, not token-name routing
 
@@ -59,12 +74,12 @@ Web search uses the documented [Ollama web-search API](https://docs.ollama.com/c
 
 Page reading and arithmetic need no search key. The reader accepts public HTTPS websites only, validates all DNS addresses, pins the connection to an approved address, and revalidates redirects. Private/reserved networks, IP-literal URLs, credentials and nonstandard ports are blocked. Limits: 3 redirects, 512 KiB body, 15-second read budget, 10,000 extracted characters. No JavaScript execution, sign-in, CAPTCHA evasion or paywall bypass. Some sites cannot be read. Page text and snippets are untrusted data, not agent instructions; this is risk reduction, not a guarantee that AI is immune to prompt injection.
 
-The agent has at most 5 model rounds, 6 tool calls and 2 concurrent requests, with a 90-second cancellation signal for model/web operations. Existing market requests have their own HTTP timeouts. All Discord reply text passes through a final punctuation cleaner: curly apostrophes become straight, fancy dashes are normalized, double quotes/ellipsis characters are removed, and trailing periods are stripped. Embed URL and ID metadata is untouched. Public replies suppress website previews and mentions; verified tool-source links are appended for research. Slash results remain private, paginated and best-effort temporary.
+The agent has at most 5 model rounds, 6 tool calls and 2 concurrent requests, with a 90-second cancellation signal for model/web operations. Existing market requests have their own HTTP timeouts. All Discord reply text passes through a final punctuation cleaner: curly apostrophes become straight, fancy dashes are normalized, double quotes/ellipsis characters are removed, and trailing periods are stripped. Embed URL and ID metadata is untouched. Public replies suppress website previews and mentions; one actual tool-source link is appended for research, preferring a source the answer cites. Sources are not thereby independently certified. Slash results remain private, paginated and best-effort temporary.
 
 ## Clean command layout
 
 - **Help:** one short command menu, with privacy/source details on a second page.
-- **Price:** a fresh exchange quote by default. Optional `mode:market` shows delayed 24h change, volume and market cap using compact totals.
+- **Price:** a recent CoinGecko aggregate by default; `mode:exchange` requests a fresh exchange last trade. Optional `mode:market` shows delayed 24h change, volume and market cap using compact totals.
 - **Pools:** one complete pool per card, ranked by liquidity; copyable token contract and clickable source title.
 - **Recent pools:** two entries per page, with short risk labels and chart links.
 - **Project docs:** one matching excerpt per page, capped at 650 characters, with its source and review date. Truncated excerpts end with an ellipsis; use the source for full context.
@@ -106,7 +121,7 @@ These are **server IDs**, not channel IDs. `DISCORD_GUILD_IDS` takes precedence 
 
 The shared `config.json` channel allowlist still controls where replies are permitted. Add the relevant channels from **each server**. Commands may appear elsewhere but will respond with a private channel-disabled notice. If they do not appear after a successful sync, refresh Discord and check installation scopes, Use Application Commands permission and Server Settings → Integrations restrictions.
 
-Install using `bot` and `applications.commands` scopes. Grant only View Channel, Send Messages, Embed Links, and Read Message History for the existing public chat behavior. Threads may require Send Messages in Threads. Enable Message Content Intent for public chat in the developer portal. **No Administrator or Manage Messages permission is required.** Commands are restricted to configured channels; list thread IDs explicitly.
+Install using `bot` and `applications.commands` scopes. Grant only View Channel, Send Messages, Embed Links, and Read Message History for the existing public chat behavior. Threads may require Send Messages in Threads. Enable Message Content Intent for public chat in the developer portal. **No Administrator or Manage Messages permission is required.** Content commands are restricted to configured channels; list thread IDs explicitly. Personal `/start` and `/stop` preferences are available outside the allowlist.
 
 ### AI: Ollama primary, Groq fallback
 
@@ -163,6 +178,7 @@ No real project was supplied, so `knowledge/projects.json` starts empty. `/ask` 
 
 ## Free services and limits
 
+- **CoinGecko:** default uncached aggregate USD snapshot with verified `last_updated_at`; free API update interval about 60 seconds; rejects quotes older than 120 seconds. Keyless or optional free Demo key.
 - **Coinbase Exchange / Kraken:** uncached public USD trade snapshots. Coinbase is tried first; Kraken recent trades are a fallback. Both require an actual trade no older than 30 seconds, not merely a recently fetched HTTP response.
 - **CoinPaprika:** token search and delayed aggregate market stats via `mode:market`. No API key configured in this implementation.
 - **DEX Screener:** token pools, liquidity, FDV and trading data.
@@ -172,7 +188,7 @@ No real project was supplied, so `knowledge/projects.json` starts empty. `/ask` 
 
 No paid market API subscription is required by this code. Public API policies and availability can change; there is no guarantee of unlimited usage, commercial rights for all uses, real-time prices, or free hosting. Check current provider terms before deployment. Run on your own always-on computer to avoid a hosting subscription.
 
-Live exchange quotes bypass the bot cache (`no-store`) and share only concurrent in-flight requests. Other market responses are cached for 60 seconds, discovery for 90 seconds, and token searches for one hour. A conservative per-provider request scheduler, request coalescing, 12-second HTTP timeouts, 429 cooldowns, a five-second per-user cooldown, and a three-command concurrency limit reduce usage. Limits are **per process**, not distributed. Missing values are shown as N/A, not invented zeros. Market queries go to external providers; `/ask` stays in local document search; `/chat` sends the private request to AI and keeps a separate per-user/channel session.
+CoinGecko prices and explicit exchange quotes bypass the bot cache (`no-store`) and share only concurrent in-flight requests. Other market responses are cached for 60 seconds, discovery for 90 seconds, and token searches for one hour. A conservative per-provider request scheduler, request coalescing, 12-second HTTP timeouts, 429 cooldowns, a five-second per-user cooldown, and a three-command concurrency limit reduce usage. Limits are **per process**, not distributed. Missing values are shown as N/A, not invented zeros. Market queries go to external providers; `/ask` stays in local document search; `/chat` sends the private request to AI and keeps a separate per-user/channel session.
 
 ## Structure
 
@@ -183,7 +199,7 @@ src/
   ai/                         Bounded tool agent and shared provider failover
   conversation/               Channel queue and legacy compatibility history
   discord/
-    commands.js               Ten slash-command definitions
+    commands.js               Twelve slash-command definitions
     command-sync.js           Per-server command synchronization
     handlers.js               Existing public mention/reply handling
     web3-handler.js           Private commands, cooldowns and help
@@ -257,4 +273,4 @@ These settings govern application logs, not npm installation output, Node runtim
 
 ## Remaining operational boundaries
 
-Deploy **one process** today. Agent conversations and private page sessions are volatile; restart clears them. Only triggered requests enter agent memory, scoped by user/channel; there is no broad channel-history ingestion in production. Inform members that questions, quoted replies, recent scoped context and tool results may reach both AI providers. No attachment ingestion, message edit/delete synchronization, durable memory, distributed quota coordination, financial advice or token-safety guarantees.
+Deploy **one process** today. User opt-out preferences persist on local disk; agent conversations and private page sessions are volatile; restart clears them. Only triggered requests enter agent memory, scoped by user/channel; there is no broad channel-history ingestion in production. Inform members that questions, quoted replies, recent scoped context and tool results may reach both AI providers. No attachment ingestion, message edit/delete synchronization, durable memory, distributed quota coordination, financial advice or token-safety guarantees.

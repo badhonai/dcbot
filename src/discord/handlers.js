@@ -26,7 +26,7 @@ function createHandlers({ client, config, history, queue, ai, router, actions, a
         if (!allowed.has(message.channelId) || message.author.bot) return;
         try {
             await queue.run(message.channelId, async () => {
-                let shouldRespond = message.mentions.has(client.user);
+                let shouldRespond = message.mentions.has(client.user, { ignoreEveryone: true, ignoreRoles: true, ignoreRepliedUser: true });
                 let referencedAction;
                 if (message.reference?.messageId) {
                     try {
@@ -39,12 +39,12 @@ function createHandlers({ client, config, history, queue, ai, router, actions, a
                     } catch { /* Deleted or inaccessible references are not triggers. */ }
                 }
                 const input = message.content.replace(/<@!?\d+>/g, '').trim();
+                history.add(message.channelId, 'user', `[${message.author.displayName || message.author.username}]: ${message.content}`, message.id);
+                if (!shouldRespond) return;
                 const recent = recentActions.get(actionKey(message));
                 const previous = referencedAction || (recent?.expires > now() ? recent.intent : null);
                 const followUp = router?.followUp?.(input, previous);
                 const autoIntent = config.naturalLanguageCommands !== false ? (router?.detect(input) || followUp) : null;
-                history.add(message.channelId, 'user', `[${message.author.displayName || message.author.username}]: ${message.content}`, message.id);
-                if (!shouldRespond && !autoIntent) return;
                 if (router && actions) {
                     const time = now(); const key = message.author.id || message.author.displayName;
                     if ((cooldowns.get(key) || 0) > time) return;

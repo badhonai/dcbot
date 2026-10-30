@@ -103,10 +103,10 @@ function chatFixture({ enabled = true } = {}) {
         history: new HistoryStore(13), queue: new ChannelQueue(10), router: createIntentRouter(),
         actions: { execute: async intent => { tools++; return new MarketService({}, { liveQuotes: quotes }).price(intent.args.token); } },
         ai: { respond: async () => { aiCalls++; return 'normal chat'; } }, logger: quiet });
-    const message = { id: 'm', content: 'whats the live btc price?', channelId: 'a', author: { id: 'u', bot: false, displayName: 'Person' }, mentions: { has: () => false }, channel: { sendTyping: async () => events.push('typing') }, reply: async payload => { events.push('reply'); sent.push(payload); return { id: 'response' }; } };
+    const message = { id: 'm', content: 'whats the live btc price?', channelId: 'a', author: { id: 'u', bot: false, displayName: 'Person' }, mentions: { has: () => enabled }, channel: { sendTyping: async () => events.push('typing') }, reply: async payload => { events.push('reply'); sent.push(payload); return { id: 'response' }; } };
     return { handlers, message, sent, events, counts: () => ({ tools, aiCalls }) };
 }
-test('ordinary live-price request types first and replies briefly without an AI-made price', async () => {
+test('mentioned live-price request types first and replies briefly without an AI-made price', async () => {
     const f = chatFixture(); await f.handlers.onMessage(f.message);
     assert.deepEqual(f.events, ['typing', 'reply']); assert.deepEqual(f.counts(), { tools: 1, aiCalls: 0 });
     assert.match(f.sent[0].content, /BTC: \$80,532/); assert.ok(f.sent[0].content.length < 180);

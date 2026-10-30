@@ -151,3 +151,7 @@ Added safe common pair-argument normalization and currency consistency checking,
 ## Skipped AI price action 1.1.4
 
 Broadened the bounded semantic recovery gate from English price-refusal output alone to price-related user phrasing, covering generic replies, localized refusals and ungrounded quotes when native tool calling is skipped. Actual selection remains model-classified and validated; bare tickers, translations, future instructions and unsafe/private requests are not permission to fetch prices. Successful native price calls are unchanged. 344 tests on Node 22/24.22.1 include the observed startup failure shape, safe non-price decisions and malformed native-call recovery. A new hosted check remains required after deployment.
+
+## Explicit public activation 1.1.5
+
+Public chat now requires a direct bot user mention or a validated reply to the bot, even for existing sessions or old auto-activation configs. Mass/role tags and untagged questions are silent; slash commands are unchanged. One channel was replaced with the supplied new ID, preserving the other four. 373 tests pass on Node 22/24.22.1, including both adapters and the real Discord mention parser. Pull/restart is required.

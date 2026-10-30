@@ -17,7 +17,7 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                 if (boundaries?.pausedUntil(message.author.id) || preferences?.isMuted(message.author.id)) return;
                 const input = message.content.replace(/<@!?\d+>/g, '').trim();
                 if (!input) return;
-                let addressed = message.mentions.has(client.user); let reference = '';
+                let addressed = message.mentions.has(client.user, { ignoreEveryone: true, ignoreRoles: true, ignoreRepliedUser: true }); let reference = '';
                 if (message.reference?.messageId) {
                     try {
                         const replied = await message.channel.messages.fetch(message.reference.messageId);
@@ -28,7 +28,7 @@ function createAgentMessageHandler({ client, config, queue, agent, preferences, 
                 const profile = discordProfile(message.member, message.author);
                 const sessionKey = `${message.channelId}:${message.author.id}`;
                 const followUp = agent.hasSession(sessionKey);
-                if (!addressed && !(config.naturalLanguageCommands !== false && (looksLikeRequest(input) || followUp))) return;
+                if (!addressed) return;
                 const time = now();
                 if (!followUp && (cooldowns.get(sessionKey) || 0) > time) return;
                 if (cooldowns.size >= 1000) {

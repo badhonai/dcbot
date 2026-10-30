@@ -16,7 +16,7 @@ function fixture() {
             toolCalls.push(intent);
             return { quote: { symbol: intent.args.token, sourceLabel: 'Coinbase', price: intent.args.token === 'ETH' ? 2930 : 80500, ageSeconds: 1, tradedAt: '2026-10-24T10:00:00Z', fetchedAt: '2026-10-24T10:00:01Z' } };
         } }, ai: { respond: async () => { aiCalls++; return 'Ordinary chat'; } } });
-    const message = { id: 'input', channelId: 'a', author: { id: 'person', displayName: 'Person', bot: false }, content: 'Btc er price koto ?', mentions: { has: () => false }, channel: { sendTyping: async () => {}, messages: { fetch: async () => ({ author: { id: 'bot' }, content: '**BTC: $80,500**' }) } }, reply: async payload => { sent.push(payload); return { id: 'sent-' + sent.length }; } };
+    const message = { id: 'input', channelId: 'a', author: { id: 'person', displayName: 'Person', bot: false }, content: 'Btc er price koto ?', mentions: { has: () => true }, channel: { sendTyping: async () => {}, messages: { fetch: async () => ({ author: { id: 'bot' }, content: '**BTC: $80,500**' }) } }, reply: async payload => { sent.push(payload); return { id: 'sent-' + sent.length }; } };
     return { ...handlers, message, toolCalls, sent, history, advance: ms => { time += ms; }, aiCalls: () => aiCalls };
 }
 test('short English and Banglish follow-ups reuse the action, not the old value', () => {
@@ -63,9 +63,9 @@ test('fresh numeric quotes and internal bookkeeping never enter general AI histo
 test('implicit follow-up context is isolated by user/channel and expires', async () => {
     const f = fixture(); await f.onMessage(f.message); f.advance(6000);
     f.message.content = 'Ar eth er ?'; f.message.author.id = 'another'; await f.onMessage(f.message);
-    assert.equal(f.sent.length, 1);
+    assert.equal(f.toolCalls.length, 1);
     f.message.author.id = 'person'; f.message.channelId = 'b'; await f.onMessage(f.message);
-    assert.equal(f.sent.length, 1);
+    assert.equal(f.toolCalls.length, 1);
     f.message.channelId = 'a'; f.advance(120001); await f.onMessage(f.message);
-    assert.equal(f.sent.length, 1);
+    assert.equal(f.toolCalls.length, 1);
 });

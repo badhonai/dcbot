@@ -43,10 +43,10 @@ Pagination is owner-checked and process-local, so buttons expire on restart. The
 
 ## Natural-language requests and recent quotes
 
-In allowed channels, members can ask directly:
+In allowed channels, members can ask by directly mentioning the bot or replying to its message:
 
 ```text
-Member: whats the current btc price?
+Member: @Emul whats the current btc price?
 Bot:    Thinking and checking
 Bot:    BTC/USDT: 80,532.63 USDT · CoinGecko cross-rate · updated 46s ago
         [Refresh price]
@@ -72,7 +72,7 @@ Each request receives the **current UTC host-clock timestamp** in its trusted co
 
 ### Expressive tone and personal conversation boundaries
 
-The AI is instructed to sound warm, multilingual and expressive with occasional appropriate emoji, without claiming literal human feelings, guilt-tripping users or insulting them. It matches the latest user language/script, including Bangla/Banglish and mixed-language messages; an explicit language request takes priority. Mention/reply activation works regardless of language, and Arabic question marks are recognized by the request gate. Discord locale is only a weak private-chat fallback, never an assumed location.
+The AI is instructed to sound warm, multilingual and expressive with occasional appropriate emoji, without claiming literal human feelings, guilt-tripping users or insulting them. It matches the latest user language/script, including Bangla/Banglish and mixed-language messages; an explicit language request takes priority. Direct mention/reply activation works regardless of language. Discord locale is only a weak private-chat fallback, never an assumed location.
 
 Public messages and private `/chat` pass a sanitized server display name (global name/username as fallback). The name may appear occasionally in a natural greeting or friendly reply, not on every message or compact price line. Names/locale are marked untrusted data, never instructions or verified identity, and may reach the configured AI providers with the request. Explicit preferred names and requests not to use a name are honored through scoped conversation context. No new permanent profile database is created.
 
@@ -88,7 +88,7 @@ Every supported public conversation request goes through the AI agent. It decide
 
 Examples: `translate this to Bangla: ...`, `draft a short welcome message`, `search for the latest ... and compare sources`, `summarize https://example.com/article`, `calculate (125 * 1.08^2) - 125`. The agent can search, read relevant pages and synthesize an answer in multiple bounded steps. It cannot perform arbitrary automation, execute code, moderate, use wallets, make purchases, or post elsewhere.
 
-Mention/reply to the bot for reliable activation. With `naturalLanguageCommands=true`, request-shaped messages and short follow-ups in an existing session can also trigger AI. This is only an activation gate, not a command selector; it cannot recognize every phrasing. Set it to `false` to require mention/reply. All paths obey the configured channel allowlist. Ordinary message replies are public; use `/chat` for private help.
+Public chat activates **only on a direct bot mention or a reply to a message authored by the bot**. `@everyone`, `@here`, role mentions, ordinary questions and untagged follow-ups do not activate it, even in an active session or with an older `naturalLanguageCommands=true` configuration. A direct mention or bot reply still works when the same message includes `@everyone`. Every follow-up must also mention/reply. All paths obey the configured channel allowlist. Slash commands are unchanged; use `/chat` for private help.
 
 Conversation memory is isolated by user/channel: the last **10 of your messages and their 10 bot replies**, with compact historical notes from the latest three tools per turn. Each session expires after **one hour of inactivity**; at most 200 process-local sessions are kept. The model is instructed to track the task goal, constraints, corrections, completed work and next action from these exchanges. Long follow-ups are no longer ignored, and `continue`/`next` can use tools to advance an active task without treating a bare ticker as a price command. Failed attempts are recorded as unfinished, not successful, so `retry` keeps its target. Overlapping requests cannot overwrite the same session out of order. Private `/chat` sessions are separate from public conversations. No broad channel history is collected by the production agent. Requests, scoped conversation context, quoted replies and tool data may be sent to Ollama and, on fallback, Groq. Prior prices are historical context, never valid fresh quotes. Sessions disappear on restart.
 
@@ -328,7 +328,7 @@ Casual banter can get occasional light teasing without requiring the exact words
 
 This is a community bot, **not a personal assistant**. No personal portfolios, wallet tracking, reminders, persistent personal profiles, unsolicited DMs, social publishing or post/announcement drafting workflows were added. Existing consent/abuse-boundary storage and scoped short-lived chat context are retained; new community tools do not write member data to disk. No new runtime dependencies.
 
-The bot has **19 slash commands and 19 validated AI tools**. `/help` is three compact private pages. Ordinary channel chat can use the same tools through AI; bare tickers still do not automatically become price requests. Try `Compare BTC and ETH`, `Research this X post: <public URL>`, `Bhai, quiz dao`, or `Give us a community icebreaker`. Only explicit requests trigger fun replies; there is no auto-posting or background engagement loop. Slash results remain private, including games; request a game in allowed channel chat for a public question.
+The bot has **19 slash commands and 19 validated AI tools**. `/help` is three compact private pages. Ordinary channel chat can use the same tools through AI; bare tickers still do not automatically become price requests. Mention/reply and try `Compare BTC and ETH`, `Research this X post: <public URL>`, `Bhai, quiz dao`, or `Give us a community icebreaker`. Only explicit requests trigger fun replies; there is no auto-posting or background engagement loop. Slash results remain private, including games; request a game in allowed channel chat for a public question.
 
 ### Research caveats
 
@@ -392,3 +392,11 @@ A code review found that semantic price recovery previously ran only when the mo
 The recovery shares the existing deadline, tool budget and freshness checks; no retry loop, new endpoint, price web fallback or provider change. It may spend one additional model call on price-related no-tool responses. This fixes the identified recovery gap; hosted end-to-end success still requires a pull/restart and fresh probe.
 
 Validation for 1.1.4: **344/344 tests on Node 22 and Node 24.22.1**, syntax/diff checks, zero known dependency vulnerabilities, and offline synthetic store-budget limits passed (Node 24: 175 MiB RSS, 182 MiB peak, 31 MiB heap). Includes a host-style no-tool Banglish startup-probe regression. The live 1.1.3 cached check was independently read, confirming the supplied failure; its runtime was connected at 103 MiB RSS / 28 MiB used heap, with 259 MiB V8 heap limit. That limit warrants panel-level memory configuration on a 256 MiB host, but it is **not evidence of an OOM or the cause of this price failure**. No 1.1.4 hosted model success has yet been observed.
+
+## Mention/reply-only activation (1.1.5)
+
+Every public message, including a follow-up in an active session, now requires a direct bot user mention or a fetched reply reference authored by the bot. Discord's mention check explicitly ignores mass mentions, role membership and inferred replied-user mentions; reply author validation is handled independently. `@everyone`/`@here` alone never trigger typing, AI, tool selection or a reply, even if old configs enable natural-language activation. A message that genuinely mentions the bot or replies to it still works if it also contains a mass tag. Slash commands, private responses, consent controls and memory are unchanged.
+
+The configured channel `1536762480167227517` is replaced with `1565605265330536560`; all four other channels are preserved. Production channel access still requires Discord permissions on the new channel. Pull/restart to load the new config and activation gate. Regression tests cover both production and legacy adapters, actual Discord mention parsing, stale config, active context, role/mass tags, other-member/deleted replies, direct mentions and bot replies.
+
+Validation for 1.1.5: **373/373 tests pass on Node 22 and exact host version Node 24.22.1**; syntax/diff checks pass and the dependency audit reports zero known vulnerabilities. Production Discord activation must still be verified after pull/restart.

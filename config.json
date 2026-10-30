@@ -2,7 +2,7 @@
   "channels": [
     "1563288188863254528",
     "1541473880546484305",
-    "1536762480167227517",
+    "1565605265330536560",
     "1522845015305486406",
     "1563541898558308382"
   ],
@@ -14,7 +14,7 @@
   "maxCompletionTokens": 300,
   "maxPendingPerChannel": 10,
   "requestTimeoutMs": 30000,
-  "naturalLanguageCommands": true,
+  "naturalLanguageCommands": false,
   "fallbackModel": "qwen/qwen3.8-27b",
   "primaryMaxTokens": 2048
 }

@@ -53,11 +53,11 @@ test('task context lasts an hour of inactivity, is bounded and expires explicitl
     memory.append('b', { user: 'Task b', answer: 'Working' }); memory.append('c', { user: 'Task c', answer: 'Working' });
     assert.equal(memory.has('a'), false); now += 60 * 60000; assert.equal(memory.has('b'), false);
 });
-test('long follow-ups are processed in an active conversation instead of silently ignored', async () => {
+test('addressed long follow-ups are processed in an active conversation instead of silently ignored', async () => {
     let calls = 0;
     const handlers = createHandlers({ config: { channels: ['a'], maxResponseLength: 1600 }, client: { user: { id: 'bot' } }, queue: new ChannelQueue(10),
         agent: { hasSession: () => true, respond: async () => { calls++; return 'Updated the task'; } } });
-    await handlers.onMessage({ author: { id: 'u', bot: false }, channelId: 'a', content: 'Use these constraints for the task: ' + 'details '.repeat(80), mentions: { has: () => false }, channel: { sendTyping: async () => {} }, reply: async () => {} });
+    await handlers.onMessage({ author: { id: 'u', bot: false }, channelId: 'a', content: 'Use these constraints for the task: ' + 'details '.repeat(80), mentions: { has: () => true }, channel: { sendTyping: async () => {} }, reply: async () => {} });
     assert.equal(calls, 1);
 });
 test('failed task requests are retained so retry refers to the failed task, not an older one', async () => {
@@ -82,10 +82,10 @@ test('overlapping requests cannot overwrite the same session out of order', asyn
     assert.match(await agent.respond('Continue it', { sessionKey: 'same' }), /previous request/);
     finish(done('First result')); await first; assert.equal(agent.hasSession('same'), true);
 });
-test('rapid follow-ups in an established task are not silently dropped by the cooldown', async () => {
+test('addressed rapid follow-ups in an established task are not silently dropped by the cooldown', async () => {
     let calls = 0;
     const handlers = createHandlers({ config: { channels: ['a'], maxResponseLength: 1600 }, now: () => 1000, client: { user: { id: 'bot' } }, queue: new ChannelQueue(10),
         agent: { hasSession: () => true, respond: async () => { calls++; return 'Continuing'; } } });
-    const message = { author: { id: 'u', bot: false }, channelId: 'a', content: 'continue', mentions: { has: () => false }, channel: { sendTyping: async () => {} }, reply: async () => {} };
+    const message = { author: { id: 'u', bot: false }, channelId: 'a', content: 'continue', mentions: { has: () => true }, channel: { sendTyping: async () => {} }, reply: async () => {} };
     await handlers.onMessage(message); await handlers.onMessage(message); assert.equal(calls, 2);
 });

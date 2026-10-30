@@ -14,7 +14,7 @@ Target: Discord-only community bot, Node 22+, 256 MB RAM / 25% CPU / 512 MB disk
 ## Acceptance checks after restart
 
 - Startup log: 19 slash commands / 19 AI tools; command-sync summary succeeds in each joined server. Local definitions alone do not prove registration succeeded.
-- `GET /healthz`: diagnostic version **3**, release **1.1.4**, Discord connected, reasonable RSS/heap. `GET /diagnostics`: cached startup status. `GET /readyz`: ready after the probes finish. No endpoint visit makes upstream calls. AI checks may be disabled or degraded by quota/provider problems.
+- `GET /healthz`: diagnostic version **3**, release **1.1.5**, Discord connected, reasonable RSS/heap. `GET /diagnostics`: cached startup status. `GET /readyz`: ready after the probes finish. No endpoint visit makes upstream calls. AI checks may be disabled or degraded by quota/provider problems.
 - In an allowed channel, invoke `/help` (three pages), `/price token:BTC`, `/compare tokens:BTC, ETH`, `/coin token:BTC`, `/trending`, `/news topic:ethereum`, `/x query:@ethereum`, `/fun activity:quiz language:banglish`, then `/answer` using the displayed question ID. Confirm `/x` reports limited/unavailable evidence truthfully if search/public reading fails.
 - Use a second account to confirm private results/buttons cannot be used by another member. Check Back/Next, Dismiss, best-effort expiry and plain-text fallback without Embed Links. Buttons expire on restart by design.
 - Test a public request: `Bhai, quiz dao`; then an answer attempt. Verify same-language short conversation, actual question ID, no early answer disclosure, no unsolicited games, no mention pings or large website unfurls. Try Bangla and English separately; mocked tests do not prove live model behavior.
@@ -52,3 +52,7 @@ For panels that launch `node ${STARTUP_FILE}` directly, the npm start heap flag 
 ### Skipped tool recovery 1.1.4
 
 `agent_did_not_call_price` means no price action executed during that probe, not that CoinGecko rejected a request. A semantic recovery previously gated only by English refusal text now also considers price-related user phrasing. One model classification must still select and validate the actual task; keywords alone never select a coin. No native forced-tool option is required (Ollama omits that option). The probe uses the unchanged real agent path, not a diagnostic-only forced quote. After deploying 1.1.4, inspect the fresh cached result; do not declare success from offline tests alone.
+
+### Mention/reply-only activation 1.1.5
+
+Public chat must only respond to a direct bot mention or a reply to the bot. Test `@everyone`, `@here`, a bot-role mention and an ordinary price question without tagging: no typing or reply, including during an active conversation. Then mention the bot directly and reply to its response: both should work. Combining a direct bot mention with a mass tag still counts as directly addressing the bot. Slash commands remain unchanged. The channel allowlist replaces `1536762480167227517` with `1565605265330536560` and preserves the other four; ensure the bot has channel view/send/history permissions there. This gate is enforced even if an old config retains naturalLanguageCommands=true.
